@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "1.9";
+export const APP_VERSION = "2.0";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -62,6 +62,7 @@ const farmDoc = (f) => doc(db, "gospodarstwa", f);
 const cowsCol = (f) => collection(db, "gospodarstwa", f, "krowy");
 const calvesCol = (f) => collection(db, "gospodarstwa", f, "mlodziez");
 const cfgDocRef = (f) => doc(db, "gospodarstwa", f, "ustawienia", "glowne");
+const photoRef = (f, id) => doc(db, "gospodarstwa", f, "zdjecia", id);
 
 function newCode() {
   const abc = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -482,6 +483,7 @@ function cowCard(c) {
     else { if (n <= 30) pill.classList.add("soon"); pill.textContent = `Poród za ${L.dni(n)}`; }
   }
   top.append(left, pill);
+  withPhoto(top, c);
   const dl = el("dl");
   const items = [
     ["Po byku", c.ojciec || "—"],
@@ -520,6 +522,7 @@ function calfCard(c) {
   left.append(el("span", "tag", c.kolczyk), el("span", "chip " + (c.plec === "b" ? "" : "yes"), kindLabel(c)));
   const age = el("span", "pill", L.ageText(c.urodzona, today));
   top.append(left, age);
+  withPhoto(top, c);
   const dl = el("dl");
   const bd = L.breedDate(c, cfg);
   let breedTxt = "—";
@@ -537,7 +540,7 @@ function calfCard(c) {
   foot.append(moveSelect(c, (p) => { writeCalf(c.id, { ...rowData(c), miejsce: p }); status(`${c.kolczyk} → ${p || "bez miejsca"}`); }));
   const btns = el("div", "cowbtns");
   if (confirmId === c.id) {
-    btns.append(el("span", "note", "Usunąć?"), btn("Nie", "ghost", () => { confirmId = null; render(); }), btn("Tak, usuń", "del", () => { confirmId = null; deleteDoc(doc(calvesCol(farm), c.id)); status("Usunięto."); }));
+    btns.append(el("span", "note", "Usunąć?"), btn("Nie", "ghost", () => { confirmId = null; render(); }), btn("Tak, usuń", "del", () => { confirmId = null; deleteDoc(doc(calvesCol(farm), c.id)); deleteDoc(photoRef(farm, c.id)).catch(() => {}); status("Usunięto."); }));
   } else {
     if (typOf(c) === "cielak" && c.plec !== "b") btns.append(btn("Do jałówek", "ghost", () => { writeCalf(c.id, { ...rowData(c), typ: "jalowka", plec: "j" }); status(`${c.kolczyk} przeniesiona do jałówek.`); }));
     if (typOf(c) === "jalowka") btns.append(btn("Do stada krów", "ghost", () => toHerd(c, {})));
@@ -548,10 +551,17 @@ function calfCard(c) {
   return card;
 }
 
+function withPhoto(top, a) {
+  const url = photoFor(a);
+  if (!url) return;
+  top.classList.add("pic");
+  top.style.backgroundImage = `linear-gradient(to top, rgb(0 0 0 / .35), transparent 55%), url("${url}")`;
+}
+
 /** Jałówka przechodzi do stada krów (np. po pierwszym zacieleniu). */
 function toHerd(c, preset) {
   if (cows.some((x) => x.kolczyk === c.kolczyk)) { status("Krowa z tym kolczykiem już jest w stadzie."); return; }
-  const data = { kolczyk: c.kolczyk, miejsce: c.miejsce || "", ojciec: c.ojciec || "", urodzona: c.urodzona || "", matka: c.matka || "",
+  const data = { kolczyk: c.kolczyk, miejsce: c.miejsce || "", ojciec: c.ojciec || "", urodzona: c.urodzona || "", matka: c.matka || "", foto: c.foto || 0,
     wycielenie: "", ruja: "", zacielenie: "", byk: "", cielna: "", zasuszona: false, przegnana: false };
   writeCow(c.id, data);
   deleteDoc(doc(calvesCol(farm), c.id)).catch(() => {});
@@ -562,6 +572,7 @@ function toHerd(c, preset) {
 function removeCow(id) {
   confirmId = null;
   deleteDoc(doc(cowsCol(farm), id)).catch(() => status("Nie udało się usunąć."));
+  deleteDoc(photoRef(farm, id)).catch(() => {});
   status("Usunięto krowę.");
 }
 
@@ -712,6 +723,7 @@ function openCow(c, preset = {}) {
   $("ojciec").value = v.ojciec || ""; $("antybiotyk").value = v.antybiotyk || "";
   $("byk").value = c && preset.zacielenie && preset.zacielenie !== c.zacielenie ? "" : (v.byk || "");
   placeSelect($("miejsce"), c ? placeOf(c) : currentPlace());
+  photoUi("k", c ? photoFor(c) : null);
   updatePreview();
   $("formTitle").textContent = c ? "Edytuj krowę" : "Dodaj krowę";
   $("saveBtn").textContent = c ? "Zapisz zmiany" : "Zapisz krowę";
@@ -743,11 +755,81 @@ $("form").addEventListener("submit", (e) => {
   };
   if (antybiotyk && !data.zasuszonaData) data.zasuszonaData = L.todayISO();
   if (!data.zasuszona) { data.antybiotyk = ""; data.zasuszonaData = ""; }
-  writeCow(editId || newId("k"), data);
+  const cid = editId || newId("k");
+  data.foto = savePhoto("k", cid, old);
+  writeCow(cid, data);
   status(editId ? `Zapisano zmiany: ${kolczyk}` : `Dodano: ${kolczyk}${miejsce ? " → " + miejsce : ""}`);
   editId = null;
   $("cowDlg").close();
 });
+
+// ---------------- zdjęcia ----------------
+const photoCache = new Map();   // id -> { v, url }
+const photoLoading = new Set();
+let photoRenderTimer = null;
+/** Zdjęcie zwierzęcia (zapisane osobno, żeby lista ładowała się szybko). */
+function photoFor(a) {
+  if (!a.foto) return null;
+  const hit = photoCache.get(a.id);
+  if (hit && hit.v === a.foto) return hit.url;
+  if (!photoLoading.has(a.id)) {
+    photoLoading.add(a.id);
+    getDoc(photoRef(farm, a.id)).then((s) => {
+      const d = s.data();
+      if (d?.data) photoCache.set(a.id, { v: a.foto, url: d.data });
+    }).catch(() => {}).finally(() => {
+      photoLoading.delete(a.id);
+      clearTimeout(photoRenderTimer); photoRenderTimer = setTimeout(() => { if (!document.querySelector("dialog[open]")) render(); }, 150);
+    });
+  }
+  return hit?.url || null;
+}
+/** Zmniejsza zdjęcie z aparatu do ~720 px (JPEG), żeby szybko się wysyłało. */
+async function shrinkPhoto(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = url; });
+    const max = 720, k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.round(img.naturalWidth * k), h = Math.round(img.naturalHeight * k);
+    const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+    cv.getContext("2d").drawImage(img, 0, 0, w, h);
+    let q = 0.62, out = cv.toDataURL("image/jpeg", q);
+    while (out.length > 280000 && q > 0.3) { q -= 0.08; out = cv.toDataURL("image/jpeg", q); }
+    return out;
+  } finally { URL.revokeObjectURL(url); }
+}
+/** Obsługa przycisków aparatu w formularzu (prefix "k" – krowa, "c" – cielak/jałówka). */
+const pendingPhoto = { k: undefined, c: undefined };   // undefined = bez zmian, "" = usuń, "data:..." = nowe
+function photoUi(p, current) {
+  pendingPhoto[p] = undefined;
+  showPhoto(p, current);
+}
+function showPhoto(p, url) {
+  const prev = $(p + "PhPrev");
+  prev.hidden = !url; prev.style.backgroundImage = url ? `url("${url}")` : "";
+  $(p + "PhDel").hidden = !url;
+  $(p + "PhLbl").textContent = url ? "Zrób nowe zdjęcie" : "Zrób zdjęcie";
+}
+for (const p of ["k", "c"]) {
+  $(p + "PhIn").addEventListener("change", async (e) => {
+    const f = e.target.files?.[0]; e.target.value = "";
+    if (!f) return;
+    $(p + "PhLbl").textContent = "Przygotowuję zdjęcie…";
+    try { pendingPhoto[p] = await shrinkPhoto(f); showPhoto(p, pendingPhoto[p]); }
+    catch { status("Nie udało się wczytać zdjęcia."); showPhoto(p, null); }
+  });
+  $(p + "PhDel").onclick = () => { pendingPhoto[p] = ""; showPhoto(p, null); };
+}
+/** Zapisuje zdjęcie (jeśli zmienione) i zwraca pole foto dla rekordu zwierzęcia. */
+function savePhoto(p, id, old) {
+  const ph = pendingPhoto[p];
+  if (ph === undefined) return old?.foto || 0;
+  if (ph === "") { deleteDoc(photoRef(farm, id)).catch(() => {}); photoCache.delete(id); return 0; }
+  const v = Date.now();
+  photoCache.set(id, { v, url: ph });
+  setDoc(photoRef(farm, id), { data: ph, zmieniono: v }).catch(() => status("Nie udało się zapisać zdjęcia."));
+  return v;
+}
 
 // ---------------- zasuszenie ----------------
 let dryId = null;
@@ -799,7 +881,7 @@ $("cAbortBtn").onclick = () => {
   if (!c) return;
   if (cows.some((x) => x.kolczyk === c.kolczyk)) { status("Krowa z tym kolczykiem już jest w stadzie."); return; }
   const today = L.todayISO();
-  writeCow(c.id, { kolczyk: c.kolczyk, miejsce: c.miejsce || "", ojciec: c.ojciec || "", urodzona: c.urodzona || "", matka: c.matka || "",
+  writeCow(c.id, { kolczyk: c.kolczyk, miejsce: c.miejsce || "", ojciec: c.ojciec || "", urodzona: c.urodzona || "", matka: c.matka || "", foto: c.foto || 0,
     wycielenie: today, wytrucie: today, ruja: "", zacielenie: "", byk: "", cielna: "", zasuszona: false, przegnana: false });
   deleteDoc(doc(calvesCol(farm), c.id)).catch(() => {});
   status(`${c.kolczyk}: wytrucie zapisane – przeniesiona do krów, terminy od dziś.`);
@@ -824,6 +906,7 @@ function openCalf(c, mode) {
   $("cMatka").value = c?.matka || ""; $("cOjciec").value = c?.ojciec || "";
   (c?.plec === "b" ? $("cB") : $("cJ")).checked = true;
   placeSelect($("cMiejsce"), c ? placeOf(c) : currentPlace());
+  photoUi("c", c ? photoFor(c) : null);
   $("calfTitle").textContent = (c ? "Edytuj " : "Dodaj ") + (calfMode === "cielak" ? "cielaka" : "jałówkę");
   armAbort("cAbortBtn", "cAbortHint", "Jałówka przejdzie do krów jak po wycieleniu – terminy liczą się od dziś.");
   $("cAbortBox").hidden = !(c && calfMode === "jalowka");
@@ -853,7 +936,9 @@ $("calfForm").addEventListener("submit", (e) => {
     kolczyk, urodzona, typ: calfMode, plec: calfMode === "cielak" && $("cB").checked ? "b" : "j",
     miejsce: $("cMiejsce").value, matka: $("cMatka").value.trim().toUpperCase().replace(/\s+/g, ""), ojciec: $("cOjciec").value.trim(),
   };
-  writeCalf(calfEditId || newId("c"), data);
+  const kid = calfEditId || newId("c");
+  data.foto = savePhoto("c", kid, calves.find((x) => x.id === calfEditId));
+  writeCalf(kid, data);
   status(calfEditId ? `Zapisano: ${kolczyk}` : `Dodano: ${kolczyk}`);
   $("calfDlg").close();
 });

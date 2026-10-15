@@ -192,3 +192,11 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:color-mix(in
 .abort small{color:var(--muted);font-size:.82rem}
 .danger{color:var(--soon);border-color:color-mix(in srgb,var(--soon) 40%,var(--line))}
 .chip.dry{background:color-mix(in srgb,var(--tag) 30%,var(--surface));color:var(--fg);border-color:transparent;max-width:100%;overflow-wrap:anywhere}
+/* zdjęcia zwierząt */
+.vh{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.photo{display:flex;flex-direction:column;gap:8px}
+.phprev{height:160px;border-radius:12px;background:var(--bg) center 30%/cover no-repeat;border:1px solid var(--line)}
+.phbtn{flex-direction:row;align-items:center;gap:8px;display:inline-flex;min-height:44px;padding:8px 14px;border-radius:10px;border:1.5px solid var(--line);background:var(--bg);color:var(--fg);font-weight:600;cursor:pointer}
+.phbtn:focus-within{outline:3px solid var(--accent);outline-offset:2px}
+.cowtop.pic{min-height:180px;align-items:flex-end;margin:-14px -14px 0;padding:14px;border-radius:11px 11px 0 0;background-size:cover;background-position:center 30%;background-repeat:no-repeat}
+.cowtop.pic .chip{background:color-mix(in srgb,var(--surface) 88%,transparent)}

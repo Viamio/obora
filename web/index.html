@@ -82,6 +82,14 @@
     <label for="kolczyk">Numer kolczyka
       <input id="kolczyk" autocomplete="off" autocapitalize="characters" placeholder="np. PL005123456789">
     </label>
+    <div class="photo">
+      <div class="phprev" id="kPhPrev" hidden></div>
+      <div class="row">
+        <label class="phbtn" for="kPhIn"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M9 4.5 7.6 6.5H5A2.5 2.5 0 0 0 2.5 9v9A2.5 2.5 0 0 0 5 20.5h14a2.5 2.5 0 0 0 2.5-2.5V9A2.5 2.5 0 0 0 19 6.5h-2.6L15 4.5H9Zm3 4.5a4.25 4.25 0 1 1 0 8.5 4.25 4.25 0 0 1 0-8.5Zm0 2a2.25 2.25 0 1 0 0 4.5 2.25 2.25 0 0 0 0-4.5Z"/></svg><span id="kPhLbl">Zrób zdjęcie</span></label>
+        <input type="file" id="kPhIn" accept="image/*" capture="environment" class="vh">
+        <button type="button" class="ghost sm" id="kPhDel" hidden>Usuń zdjęcie</button>
+      </div>
+    </div>
     <label for="miejsce">Miejsce
       <select id="miejsce"></select>
     </label>
@@ -155,6 +163,14 @@
     <label for="cKolczyk">Numer kolczyka
       <input id="cKolczyk" autocomplete="off" autocapitalize="characters" placeholder="np. PL005123456789">
     </label>
+    <div class="photo">
+      <div class="phprev" id="cPhPrev" hidden></div>
+      <div class="row">
+        <label class="phbtn" for="cPhIn"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M9 4.5 7.6 6.5H5A2.5 2.5 0 0 0 2.5 9v9A2.5 2.5 0 0 0 5 20.5h14a2.5 2.5 0 0 0 2.5-2.5V9A2.5 2.5 0 0 0 19 6.5h-2.6L15 4.5H9Zm3 4.5a4.25 4.25 0 1 1 0 8.5 4.25 4.25 0 0 1 0-8.5Zm0 2a2.25 2.25 0 1 0 0 4.5 2.25 2.25 0 0 0 0-4.5Z"/></svg><span id="cPhLbl">Zrób zdjęcie</span></label>
+        <input type="file" id="cPhIn" accept="image/*" capture="environment" class="vh">
+        <button type="button" class="ghost sm" id="cPhDel" hidden>Usuń zdjęcie</button>
+      </div>
+    </div>
     <fieldset class="seg" id="cSeg">
       <legend>Płeć cielaka</legend>
       <label><input type="radio" name="plec" value="b" id="cB"> Byk</label>
