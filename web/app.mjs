@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "2.1";
+export const APP_VERSION = "2.2";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -62,6 +62,7 @@ const farmDoc = (f) => doc(db, "gospodarstwa", f);
 const cowsCol = (f) => collection(db, "gospodarstwa", f, "krowy");
 const calvesCol = (f) => collection(db, "gospodarstwa", f, "mlodziez");
 const cfgDocRef = (f) => doc(db, "gospodarstwa", f, "ustawienia", "glowne");
+const queueCol = (f) => collection(db, "gospodarstwa", f, "dozacielenia");
 const photoRef = (f, id) => doc(db, "gospodarstwa", f, "zdjecia", id);
 
 function newCode() {
@@ -78,7 +79,8 @@ const newId = (p) => p + Date.now().toString(36) + Math.random().toString(36).sl
 
 // ---------------- stan ----------------
 let farm = LS.get("obora_farm");
-let cows = [], calves = [];
+let cows = [], calves = [], queue = [];
+let queueDoneId = null;   // wpis z listy „Do zacielenia”, który zniknie po zapisaniu zacielenia
 let cfg = L.cfgOf();
 let cfgLoaded = false;
 let editId = null, confirmId = null, calfEditId = null;
@@ -136,6 +138,10 @@ function start(code) {
     if (snap.metadata.fromCache) status(off); else if ($("status").textContent === off) status("");
     render();
   }, () => status("Brak dostępu do bazy. Sprawdź internet.")));
+  unsub.push(onSnapshot(queueCol(code), (snap) => {
+    queue = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    render();
+  }, () => {}));
   unsub.push(onSnapshot(calvesCol(code), (snap) => {
     calves = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     render();
@@ -234,7 +240,7 @@ function placeSelect(sel, value) {
 
 // ---------------- zakładki ----------------
 function tabList() {
-  const t = [{ key: "glowna", label: "Główna" }];
+  const t = [{ key: "glowna", label: "Główna" }, { key: "zacielenie", label: "Do zacielenia", n: queue.length }];
   for (const p of places()) t.push({ key: "m:" + p, label: p, n: cows.filter(inPlace(p)).length + calves.filter(inPlace(p)).length });
   const none = cows.filter(inPlace(NO_PLACE)).length + calves.filter(inPlace(NO_PLACE)).length;
   if (none && places().length) t.push({ key: "m:" + NO_PLACE, label: "Bez miejsca", n: none });
@@ -293,11 +299,12 @@ function render(dir = 0) {
   const v = $("view");
   v.replaceChildren();
   if (tab === "glowna") viewMain(v);
+  else if (tab === "zacielenie") viewQueue(v);
   else if (tab === "cielaki" || tab === "jalowki") viewCalves(v, tab === "cielaki" ? "cielak" : "jalowka");
   else if (tab === "ustawienia") viewSettings(v);
   else viewPlace(v, tab.slice(2));
   $("fab").textContent = tab === "cielaki" ? "+ Dodaj cielaka" : tab === "jalowki" ? "+ Dodaj jałówkę" : "+ Dodaj";
-  $("fab").hidden = tab === "ustawienia";
+  $("fab").hidden = tab === "ustawienia" || tab === "zacielenie";
   if (dir) { v.classList.remove("in-l", "in-r"); void v.offsetWidth; v.classList.add(dir > 0 ? "in-r" : "in-l"); }
 }
 
@@ -716,15 +723,19 @@ function updatePreview() {
   $("moveOut").textContent = due ? `${L.fmt(L.addDays(due, -cfg.move))} (${cfg.move} dni przed)` : "—";
   $("rujaOut").textContent = r ? L.fmt(L.addDays(r, L.CYCLE)) : "—";
 }
+let editSeed = null;   // dane krowy, która jeszcze nie dotarła z bazy (np. właśnie przeniesiona jałówka)
 function openCow(c, preset = {}) {
+  const keepQueue = queueDoneId;
   closeDialogs();
+  queueDoneId = keepQueue;
   editId = c ? c.id : null;
+  editSeed = c;
   const v = { ...(c || {}), ...preset };
   $("form").reset(); $("err").hidden = true;
   $("kolczyk").value = v.kolczyk || ""; $("wycielenie").value = v.wycielenie || ""; $("ruja").value = v.ruja || ""; $("zacielenie").value = v.zacielenie || "";
   $("ojciec").value = v.ojciec || ""; $("antybiotyk").value = v.antybiotyk || "";
   $("byk").value = c && preset.zacielenie && preset.zacielenie !== c.zacielenie ? "" : (v.byk || "");
-  placeSelect($("miejsce"), c ? placeOf(c) : currentPlace());
+  placeSelect($("miejsce"), preset.miejsce != null ? preset.miejsce : c ? placeOf(c) : currentPlace());
   photoUi("k", c ? photoFor(c) : null);
   updatePreview();
   $("formTitle").textContent = c ? "Edytuj krowę" : "Dodaj krowę";
@@ -736,7 +747,7 @@ function openCow(c, preset = {}) {
 }
 ["zacielenie", "ruja"].forEach((id) => $(id).addEventListener("input", updatePreview));
 $("cancelBtn").onclick = () => { editId = null; $("cowDlg").close(); };
-$("cowDlg").addEventListener("close", () => { editId = null; });
+$("cowDlg").addEventListener("close", () => { editId = null; editSeed = null; queueDoneId = null; });
 $("form").addEventListener("submit", (e) => {
   e.preventDefault();
   const showErr = (t) => { $("err").textContent = t; $("err").hidden = false; };
@@ -745,7 +756,7 @@ $("form").addEventListener("submit", (e) => {
   const ojciec = $("ojciec").value.trim(), byk = $("byk").value.trim(), miejsce = $("miejsce").value, antybiotyk = $("antybiotyk").value.trim();
   if (!kolczyk) return showErr("Wpisz numer kolczyka.");
   if (cows.some((c) => c.kolczyk === kolczyk && c.id !== editId)) return showErr("Krowa z tym kolczykiem już jest w stadzie.");
-  const old = cows.find((c) => c.id === editId);
+  const old = cows.find((c) => c.id === editId) || (editId ? editSeed : null);
   const same = old && old.zacielenie === zacielenie;
   const data = {
     ...(old ? rowData(old) : {}),
@@ -760,6 +771,8 @@ $("form").addEventListener("submit", (e) => {
   const cid = editId || newId("k");
   data.foto = savePhoto("k", cid, old);
   writeCow(cid, data);
+  if (queueDoneId && data.zacielenie) { deleteDoc(doc(queueCol(farm), queueDoneId)).catch(() => {}); }
+  queueDoneId = null;
   status(editId ? `Zapisano zmiany: ${kolczyk}` : `Dodano: ${kolczyk}${miejsce ? " → " + miejsce : ""}`);
   editId = null;
   $("cowDlg").close();
@@ -831,6 +844,127 @@ function savePhoto(p, id, old) {
   photoCache.set(id, { v, url: ph });
   setDoc(photoRef(farm, id), { data: ph, zmieniono: v }).catch(() => status("Nie udało się zapisać zdjęcia."));
   return v;
+}
+
+// ---------------- do zacielenia ----------------
+const findAnimal = (k) => cows.find((c) => c.kolczyk === k) || calves.find((c) => c.kolczyk === k) || null;
+function viewQueue(v) {
+  const today = L.todayISO();
+  const head = el("div", "placehead");
+  head.append(el("h2", null, "Do zacielenia"), el("span", "count", `${queue.length} szt.`));
+  v.append(head);
+
+  // --- dodawanie ---
+  const add = el("form", "card qadd"); add.noValidate = true;
+  add.append(el("h3", "subh", "Dodaj do listy"));
+  const selLab = el("label"); selLab.htmlFor = "qPick"; selLab.append(document.createTextNode("Wybierz z wpisanych"));
+  const sel = el("select"); sel.id = "qPick";
+  const o0 = el("option", null, "— wybierz krowę lub jałówkę —"); o0.value = ""; sel.append(o0);
+  const inQ = new Set(queue.map((q) => q.kolczyk));
+  const grp = (label, list) => {
+    if (!list.length) return;
+    const g = el("optgroup"); g.label = label;
+    for (const a of list) {
+      const o = el("option", null, `${a.kolczyk}${placeOf(a) ? " · " + placeOf(a) : ""}${inQ.has(a.kolczyk) ? " (już na liście)" : ""}${L.pregnant(a) ? " (cielna)" : ""}`);
+      o.value = a.kolczyk; o.disabled = inQ.has(a.kolczyk); g.append(o);
+    }
+    sel.append(g);
+  };
+  grp("Krowy", [...cows].sort((a, b) => a.kolczyk.localeCompare(b.kolczyk)));
+  grp("Jałówki", calves.filter((c) => typOf(c) === "jalowka").sort((a, b) => a.kolczyk.localeCompare(b.kolczyk)));
+  selLab.append(sel);
+  const or = el("p", "hint", "albo wpisz ręcznie:");
+  const kLab = el("label"); kLab.htmlFor = "qKolczyk"; kLab.append(document.createTextNode("Numer kolczyka"));
+  const kIn = el("input"); kIn.id = "qKolczyk"; kIn.autocomplete = "off"; kIn.placeholder = "np. PL005123456789"; kIn.setAttribute("autocapitalize", "characters"); kLab.append(kIn);
+  const pLab = el("label"); pLab.htmlFor = "qMiejsce"; pLab.append(document.createTextNode("Miejsce"));
+  const pSel = el("select"); pSel.id = "qMiejsce"; placeSelect(pSel, ""); pLab.append(pSel);
+  sel.onchange = () => { const a = findAnimal(sel.value); kIn.value = ""; pSel.value = a ? placeOf(a) : ""; };
+  kIn.oninput = () => { if (kIn.value) sel.value = ""; const a = findAnimal(kIn.value.trim().toUpperCase().replace(/\s+/g, "")); if (a) pSel.value = placeOf(a); };
+  const err = el("p", "err"); err.hidden = true;
+  const sub = el("button", "primary", "Dodaj do listy"); sub.type = "submit";
+  add.append(selLab, or, kLab, pLab, err, sub);
+  add.onsubmit = (e) => {
+    e.preventDefault();
+    const k = (sel.value || kIn.value).trim().toUpperCase().replace(/\s+/g, "");
+    if (!k) { err.textContent = "Wybierz krowę z listy albo wpisz kolczyk."; err.hidden = false; return; }
+    if (queue.some((q) => q.kolczyk === k)) { err.textContent = "Ta sztuka już jest na liście."; err.hidden = false; return; }
+    const a = findAnimal(k);
+    const miejsce = pSel.value || (a ? placeOf(a) : "");
+    setDoc(doc(queueCol(farm), newId("z")), { kolczyk: k, miejsce, dodano: today, zmieniono: Date.now() }).catch(() => status("Nie udało się zapisać."));
+    // ręcznie wpisane miejsce zapisz też przy zwierzęciu
+    if (a && pSel.value && pSel.value !== placeOf(a)) {
+      if (cows.includes(a)) patch(a, { miejsce: pSel.value }); else writeCalf(a.id, { ...rowData(a), miejsce: pSel.value });
+    }
+    status(`${k} dodana do listy do zacielenia.`);
+  };
+  let sugSec = null;
+
+  // --- podpowiedzi: ruja / gotowe do zacielenia ---
+  const sug = allAlerts(cows, calves, 1, -999).filter((a) => ["ruja", "insem", "krycie"].includes(a.kind) && !inQ.has(a.cow.kolczyk));
+  if (sug.length) {
+    const sec = el("section", "col");
+    sec.append(el("h3", "subh", "Podpowiedzi: ruja i gotowe do zacielenia"));
+    const box = el("div", "alerts");
+    for (const a of sug) {
+      const row = el("div", "alert");
+      const t = el("div", "atxt");
+      t.append(el("b", null, `${a.title} ${L.kiedy(a.n)}`), el("small", null, a.sub + (placeOf(a.cow) ? ` · ${placeOf(a.cow)}` : "")));
+      const ab = el("div", "abtns");
+      ab.append(btn("Dodaj do listy", "okbtn", () => setDoc(doc(queueCol(farm), newId("z")), { kolczyk: a.cow.kolczyk, miejsce: placeOf(a.cow), dodano: today, zmieniono: Date.now() })));
+      row.append(el("span", "tag", a.cow.kolczyk), t, ab);
+      box.append(row);
+    }
+    sec.append(box); sugSec = sec;
+  }
+
+  // --- lista ---
+  const sec = el("section", "col");
+  sec.append(el("h3", "subh", `Lista (${queue.length})`));
+  const list = el("div", "list");
+  if (!queue.length) list.append(el("div", "empty", "Lista jest pusta. Dodaj krowy lub jałówki powyżej – np. przed przyjazdem inseminatora."));
+  const byPlace = [...queue].sort((a, b) => (a.miejsce || "~").localeCompare(b.miejsce || "~", "pl") || (a.dodano || "").localeCompare(b.dodano || ""));
+  for (const q of byPlace) {
+    const a = findAnimal(q.kolczyk);
+    const row = el("article", "cow qrow");
+    const top = el("div", "cowtop");
+    const left = el("div", "cowleft");
+    left.append(el("span", "tag", q.kolczyk));
+    left.append(el("span", "chip", a ? (cows.includes(a) ? "Krowa" : kindLabel(a)) : "Spoza stada"));
+    if (a && L.pregnant(a)) left.append(el("span", "chip no", "Uwaga: cielna"));
+    top.append(left, el("span", "pill none", q.dodano ? `dodana ${L.fmt(q.dodano)}` : ""));
+    row.append(top);
+    if (a) withPhoto(top, a);
+    const foot = el("div", "cowfoot");
+    const ps = el("select", "locsel noswipe"); ps.setAttribute("aria-label", "Miejsce"); placeSelect(ps, q.miejsce || "");
+    ps.onchange = () => setDoc(doc(queueCol(farm), q.id), { ...rowData(q), miejsce: ps.value });
+    const lw = el("label", "locwrap"); lw.append(el("span", null, "Miejsce"), ps);
+    const btns = el("div", "cowbtns");
+    btns.append(
+      btn("Zacielona", "okbtn", () => inseminate(q)),
+      btn("Usuń z listy", "ghost", () => { deleteDoc(doc(queueCol(farm), q.id)); status(`${q.kolczyk} usunięta z listy.`); }),
+    );
+    foot.append(lw, btns);
+    row.append(foot);
+    list.append(row);
+  }
+  sec.append(list);
+  if (queue.length > 1) sec.append(btn("Wyczyść całą listę", "ghost", () => {
+    const b = writeBatch(db); queue.forEach((q) => b.delete(doc(queueCol(farm), q.id))); b.commit(); status("Lista wyczyszczona.");
+  }));
+  v.append(sec, add);
+  if (sugSec) v.append(sugSec);
+}
+/** Zacielenie z listy: otwiera formularz krowy z dzisiejszą datą (wpis znika po zapisaniu). */
+function inseminate(q) {
+  const today = L.todayISO();
+  const a = findAnimal(q.kolczyk);
+  queueDoneId = q.id;
+  const preset = { zacielenie: today, ruja: today, miejsce: q.miejsce || (a ? placeOf(a) : "") };
+  if (a && cows.includes(a)) openCow(a, preset);
+  else if (a) { toHerd(a, { zacielenie: today, ruja: today }); }
+  else openCow(null, { ...preset, kolczyk: q.kolczyk });
+  status("Wpisz, jakim bykiem zacielona, i naciśnij Zapisz.");
+  setTimeout(() => $("byk").focus(), 60);
 }
 
 // ---------------- zasuszenie ----------------

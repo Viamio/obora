@@ -202,3 +202,6 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:color-mix(in
 .cow.pic::before{content:"";position:absolute;inset:0;z-index:-2;background:var(--photo) center 30%/cover no-repeat}
 .cow.pic::after{content:"";position:absolute;inset:0;z-index:-1;background:color-mix(in srgb,var(--surface) 80%,transparent)}
 .cow.pic .chip,.cow.pic .locsel{background:color-mix(in srgb,var(--surface) 85%,transparent)}
+.qadd{gap:10px}
+.qadd .subh{margin:0}
+.qrow .cowtop{min-height:0}
