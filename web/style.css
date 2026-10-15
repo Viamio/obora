@@ -229,3 +229,12 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:color-mix(in
 .alert.kar{background:color-mix(in srgb,var(--soon-bg) 70%,var(--surface))}
 .alert.kar b{color:var(--soon)}
 small.dni{font-size:.75em;font-weight:500;opacity:.75;white-space:nowrap}
+.hist summary{cursor:pointer;list-style:none;display:flex;align-items:baseline;gap:6px}
+.hist summary::after{content:"＋";margin-left:auto;color:var(--muted)}
+.hist[open] summary::after{content:"－"}
+.hist summary small{color:var(--muted)}
+.hlist{display:flex;flex-direction:column}
+.hrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.htxt{display:flex;gap:10px;align-items:baseline;min-width:0}
+.htxt small{color:var(--muted);font-variant-numeric:tabular-nums;flex:0 0 auto}
+.htxt span{min-width:0;overflow-wrap:anywhere}

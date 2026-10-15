@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "2.8";
+export const APP_VERSION = "2.9";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -62,6 +62,7 @@ const farmDoc = (f) => doc(db, "gospodarstwa", f);
 const cowsCol = (f) => collection(db, "gospodarstwa", f, "krowy");
 const calvesCol = (f) => collection(db, "gospodarstwa", f, "mlodziez");
 const cfgDocRef = (f) => doc(db, "gospodarstwa", f, "ustawienia", "glowne");
+const histCol = (f) => collection(db, "gospodarstwa", f, "historia");
 const queueCol = (f) => collection(db, "gospodarstwa", f, "dozacielenia");
 const photoRef = (f, id) => doc(db, "gospodarstwa", f, "zdjecia", id);
 
@@ -79,7 +80,7 @@ const newId = (p) => p + Date.now().toString(36) + Math.random().toString(36).sl
 
 // ---------------- stan ----------------
 let farm = LS.get("obora_farm");
-let cows = [], calves = [], queue = [];
+let cows = [], calves = [], queue = [], history = [];
 let queueDoneId = null;   // wpis z listy „Do zacielenia”, który zniknie po zapisaniu zacielenia
 let cfg = L.cfgOf();
 let cfgLoaded = false;
@@ -138,6 +139,11 @@ function start(code) {
     if (snap.metadata.fromCache) status(off); else if ($("status").textContent === off) status("");
     render();
   }, () => status("Brak dostępu do bazy. Sprawdź internet.")));
+  unsub.push(onSnapshot(histCol(code), (snap) => {
+    history = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    pruneHistory();
+    if (tab === "glowna") render();
+  }, () => {}));
   unsub.push(onSnapshot(queueCol(code), (snap) => {
     queue = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     render();
@@ -217,11 +223,15 @@ const rowData = (c) => { const { id, ...r } = c; return r; };
 function writeCow(id, data) {
   data.termin = L.due(data) || "";
   data.zmieniono = Date.now();
+  const before = cows.find((x) => x.id === id);
+  logChange("krowy", id, before ? rowData(before) : null, data);
   setDoc(doc(cowsCol(farm), id), data).catch(() => status("Nie udało się zapisać. Sprawdź internet."));
 }
 function patch(c, changes, msg) { writeCow(c.id, { ...rowData(c), ...changes }); if (msg) status(msg); }
 function writeCalf(id, data) {
   data.zmieniono = Date.now();
+  const before = calves.find((x) => x.id === id);
+  logChange("mlodziez", id, before ? rowData(before) : null, data);
   setDoc(doc(calvesCol(farm), id), data).catch(() => status("Nie udało się zapisać. Sprawdź internet."));
 }
 function saveCfg(next, msg) {
@@ -352,6 +362,7 @@ function viewMain(v) {
   const res = el("div", "col"); res.id = "searchRes";
   const sec = el("section", "col"); sec.append(el("h2", null, `Wszystkie zwierzęta (${all})`), s, res); v.append(sec);
   renderSearch();
+  historySection(v);
 }
 function placeTile(label, key) {
   const nc = cows.filter(inPlace(key)).length, nk = calves.filter(inPlace(key)).length;
@@ -567,7 +578,7 @@ function calfCard(c) {
   foot.append(moveSelect(c, (p) => { writeCalf(c.id, { ...rowData(c), miejsce: p }); status(`${c.kolczyk} → ${p || "bez miejsca"}`); }));
   const btns = el("div", "cowbtns");
   if (confirmId === c.id) {
-    btns.append(el("span", "note", "Usunąć?"), btn("Nie", "ghost", () => { confirmId = null; render(); }), btn("Tak, usuń", "del", () => { confirmId = null; deleteDoc(doc(calvesCol(farm), c.id)); deleteDoc(photoRef(farm, c.id)).catch(() => {}); status("Usunięto."); }));
+    btns.append(el("span", "note", "Usunąć?"), btn("Nie", "ghost", () => { confirmId = null; render(); }), btn("Tak, usuń", "del", () => { confirmId = null; deleteAnimal("mlodziez", c); status("Usunięto. Możesz to cofnąć w Historii zmian na Głównej."); }));
   } else {
     if (typOf(c) === "cielak" && c.plec !== "b") btns.append(btn("Do jałówek", "ghost", () => { writeCalf(c.id, { ...rowData(c), typ: "jalowka", plec: "j" }); status(`${c.kolczyk} przeniesiona do jałówek.`); }));
     if (typOf(c) === "jalowka") btns.append(btn("Do stada krów", "ghost", () => toHerd(c, {})));
@@ -593,16 +604,99 @@ function toHerd(c, preset) {
   const data = { kolczyk: c.kolczyk, miejsce: c.miejsce || "", ojciec: c.ojciec || "", urodzona: c.urodzona || "", matka: c.matka || "", foto: c.foto || 0,
     wycielenie: "", ruja: "", zacielenie: "", byk: "", cielna: "", zasuszona: false, przegnana: false };
   writeCow(c.id, data);
-  deleteDoc(doc(calvesCol(farm), c.id)).catch(() => {});
+  deleteAnimal("mlodziez", c, true);
   status(`${c.kolczyk} przeniesiona do stada krów.`);
   if (preset.zacielenie) { openCow({ id: c.id, ...data }, preset); setTimeout(() => $("byk").focus(), 50); status("Wpisz, jakim bykiem zacielona, i naciśnij Zapisz."); }
 }
 
 function removeCow(id) {
   confirmId = null;
-  deleteDoc(doc(cowsCol(farm), id)).catch(() => status("Nie udało się usunąć."));
-  deleteDoc(photoRef(farm, id)).catch(() => {});
-  status("Usunięto krowę.");
+  const c = cows.find((x) => x.id === id);
+  if (c) deleteAnimal("krowy", c);
+  status("Usunięto krowę. Możesz to cofnąć w Historii zmian na Głównej.");
+}
+
+// ---------------- historia zmian (24 h) z cofaniem ----------------
+const DAY_MS = 24 * 3600 * 1000;
+let grp = null, undoing = false;
+/** Wszystkie zapisy z jednego stuknięcia trafiają do jednej grupy (cofane razem). */
+function group() { if (!grp) { grp = newId("g"); queueMicrotask(() => { grp = null; }); } return grp; }
+const LABELS = { kolczyk: "kolczyk", miejsce: "miejsce", ojciec: "ojciec", wycielenie: "wycielenie", ruja: "ruja", zacielenie: "zacielenie",
+  byk: "byk", cielna: "cielność", zasuszona: "zasuszenie", zasuszonaData: "data zasuszenia", antybiotyk: "antybiotyk", karencja: "karencja",
+  karencjaOk: "karencja", karencjaKoniec: "karencja", przegnana: "porodówka", foto: "zdjęcie", ukryj: "ukryte zadanie", wytrucie: "wytrucie",
+  urodzona: "data urodzenia", plec: "płeć", typ: "typ", matka: "matka" };
+function describe(kol, before, after) {
+  const typ = kol === "krowy" ? "krowę" : "jałówkę/cielaka";
+  if (!before) return `Dodano ${typ} ${after.kolczyk}`;
+  if (!after) return `Usunięto ${typ} ${before.kolczyk}`;
+  const ch = [...new Set(Object.keys(LABELS).filter((k) => JSON.stringify(before[k] ?? "") !== JSON.stringify(after[k] ?? "")).map((k) => LABELS[k]))];
+  return ch.length ? `${after.kolczyk}: ${ch.join(", ")}` : null;
+}
+function logChange(kol, id, before, after, extra = {}) {
+  if (undoing || !farm) return;
+  const opis = describe(kol, before, after);
+  if (!opis) return;
+  setDoc(doc(histCol(farm), newId("h")), { czas: Date.now(), grupa: group(), kol, docId: id, przed: before, usun: !after, opis, ...extra }).catch(() => {});
+}
+function deleteAnimal(kol, a, quiet = false) {
+  logChange(kol, a.id, rowData(a), null, quiet ? { cicho: true } : {});
+  deleteDoc(doc(kol === "krowy" ? cowsCol(farm) : calvesCol(farm), a.id)).catch(() => status("Nie udało się usunąć."));
+}
+/** Cofa całą grupę zmian: przywraca stan sprzed nich. */
+async function undoGroup(g) {
+  const entries = history.filter((h) => h.grupa === g).sort((a, b) => b.czas - a.czas);
+  undoing = true;
+  try {
+    for (const h of entries) {
+      const ref = doc(h.kol === "krowy" ? cowsCol(farm) : calvesCol(farm), h.docId);
+      if (h.przed) await setDoc(ref, h.przed); else await deleteDoc(ref);
+    }
+    const b = writeBatch(db); entries.forEach((h) => b.delete(doc(histCol(farm), h.id))); await b.commit();
+    status(`Cofnięto: ${entries.filter((h) => !h.cicho).map((h) => h.opis).join(" + ")}`);
+  } catch { status("Nie udało się cofnąć. Sprawdź internet."); }
+  undoing = false;
+}
+/** Usuwa wpisy starsze niż 24 h (i zdjęcia zwierząt usuniętych na stałe). */
+let pruning = false;
+function pruneHistory() {
+  if (pruning) return;
+  const old = history.filter((h) => Date.now() - (h.czas || 0) > DAY_MS);
+  if (!old.length) return;
+  pruning = true;
+  const b = writeBatch(db);
+  for (const h of old) {
+    b.delete(doc(histCol(farm), h.id));
+    if (h.usun && !cows.some((c) => c.id === h.docId) && !calves.some((c) => c.id === h.docId)) b.delete(photoRef(farm, h.docId));
+  }
+  b.commit().catch(() => {}).finally(() => { pruning = false; });
+}
+function historySection(v) {
+  const recent = history.filter((h) => Date.now() - (h.czas || 0) <= DAY_MS);
+  const groups = new Map();
+  for (const h of recent.sort((a, b) => b.czas - a.czas)) {
+    if (!groups.has(h.grupa)) groups.set(h.grupa, []);
+    groups.get(h.grupa).push(h);
+  }
+  const box = el("details", "card hist");
+  const sum = el("summary"); sum.append(el("b", null, "Historia zmian"), el("small", null, ` ostatnie 24 h · ${groups.size}`));
+  box.append(sum);
+  if (!groups.size) box.append(el("p", "hint", "Brak zmian w ostatnich 24 godzinach. Tu zobaczysz każdą zmianę i będziesz mógł ją cofnąć – np. gdy ktoś przypadkiem usunie krowę."));
+  const list = el("div", "hlist");
+  [...groups.entries()].slice(0, 60).forEach(([g, es]) => {
+    const row = el("div", "hrow");
+    const t = new Date(Math.max(...es.map((e) => e.czas)));
+    const txt = el("div", "htxt");
+    txt.append(el("small", null, t.toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" })), el("span", null, es.filter((e) => !e.cicho).map((e) => e.opis).reverse().join(" + ")));
+    const b = btn("Cofnij", "ghost sm", () => {
+      if (b.dataset.armed) { b.disabled = true; undoGroup(g); return; }
+      b.dataset.armed = "1"; b.textContent = "Na pewno cofnąć?"; b.classList.add("del");
+    });
+    row.append(txt, b);
+    list.append(row);
+  });
+  box.append(list);
+  box.append(el("p", "hint", "Cofnięcie przywraca stan sprzed zmiany. Wpisy starsze niż 24 godziny znikają same."));
+  v.append(box);
 }
 
 function viewSettings(v) {
@@ -1111,7 +1205,7 @@ $("cAbortBtn").onclick = () => {
   const today = L.todayISO();
   writeCow(c.id, { kolczyk: c.kolczyk, miejsce: c.miejsce || "", ojciec: c.ojciec || "", urodzona: c.urodzona || "", matka: c.matka || "", foto: c.foto || 0,
     wycielenie: today, wytrucie: today, ruja: "", zacielenie: "", byk: "", cielna: "", zasuszona: false, przegnana: false });
-  deleteDoc(doc(calvesCol(farm), c.id)).catch(() => {});
+  deleteAnimal("mlodziez", c, true);
   status(`${c.kolczyk}: wytrucie zapisane – przeniesiona do krów, terminy od dziś.`);
   $("calfDlg").close();
 };
