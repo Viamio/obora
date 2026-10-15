@@ -64,6 +64,7 @@
 
   <!-- Aplikacja -->
   <main id="app" hidden style="display:flex;flex-direction:column;gap:18px">
+    <nav class="places" id="places" aria-label="Miejsce w oborze"></nav>
     <div class="bar" id="notifBar" hidden>
       <p><b>Powiadomienia są wyłączone.</b> Włącz je, żeby rano dostawać listę zadań na pasku telefonu.</p>
       <button class="primary" id="notifBtn" style="flex:0">Włącz</button>
@@ -85,6 +86,10 @@
       <label for="kolczyk">Numer kolczyka
         <input id="kolczyk" autocomplete="off" autocapitalize="characters" placeholder="np. PL005123456789">
       </label>
+      <label for="miejsce">Miejsce / kojec <small>(np. Średnia obora)</small>
+        <input id="miejsce" autocomplete="off" list="placeList" placeholder="gdzie stoi krowa">
+      </label>
+      <datalist id="placeList"></datalist>
       <label for="ojciec">Po jakim byku <small>(ojciec krowy, opcjonalnie)</small>
         <input id="ojciec" autocomplete="off" list="bykList" placeholder="nazwa lub numer byka">
       </label>
@@ -118,7 +123,7 @@
     <section style="display:flex;flex-direction:column;gap:12px">
       <div class="listhead">
         <h2>Stado</h2>
-        <input id="szukaj" type="search" placeholder="Szukaj kolczyka lub byka…" aria-label="Szukaj kolczyka lub byka">
+        <input id="szukaj" type="search" placeholder="Szukaj kolczyka, byka, miejsca…" aria-label="Szukaj">
       </div>
       <div class="list" id="list"><div class="empty">Ładowanie stada…</div></div>
     </section>

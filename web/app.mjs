@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "1.1";
+export const APP_VERSION = "1.2";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -83,6 +83,10 @@ let cfg = L.cfgOf();
 let editId = null, confirmId = null;
 let unsub = [];
 let loaded = false;
+const NO_PLACE = "__brak";
+let place = LS.get("obora_miejsce") || "";   // "" = wszystkie
+const placeOf = (c) => (c.miejsce || "").trim();
+const visible = () => !place ? cows : cows.filter((c) => (place === NO_PLACE ? !placeOf(c) : placeOf(c) === place));
 
 function status(t) { $("status").textContent = t; }
 
@@ -209,9 +213,10 @@ function btn(text, cls, fn) { const b = el("button", cls, text); b.type = "butto
 function renderAlerts() {
   const box = $("alerts"); box.replaceChildren();
   const today = L.todayISO();
-  const list = L.alerts(cows, cfg, cfg.ahead, 14, today);
+  const vis = visible();
+  const list = L.alerts(vis, cfg, cfg.ahead, 14, today);
   if (!list.length) {
-    box.append(el("div", "empty", cows.length ? `Nic do zrobienia w najbliższych ${L.dni(cfg.ahead)}.` : "Tu pojawią się zadania: zacielenie, ruja, badanie cielności, zasuszenie, porodówka i wycielenie."));
+    box.append(el("div", "empty", vis.length ? `Nic do zrobienia w najbliższych ${L.dni(cfg.ahead)}.` : "Tu pojawią się zadania: zacielenie, ruja, badanie cielności, zasuszenie, porodówka i wycielenie."));
     return;
   }
   for (const a of list) {
@@ -233,32 +238,60 @@ function renderAlerts() {
   }
 }
 
+function renderPlaces() {
+  const nav = $("places");
+  const counts = new Map();
+  let none = 0;
+  for (const c of cows) { const p = placeOf(c); if (p) counts.set(p, (counts.get(p) || 0) + 1); else none++; }
+  if (place && place !== NO_PLACE && !counts.has(place)) { place = ""; LS.set("obora_miejsce", null); }
+  if (place === NO_PLACE && !none) { place = ""; LS.set("obora_miejsce", null); }
+  nav.replaceChildren();
+  nav.hidden = counts.size === 0;
+  const chip = (label, key, n) => {
+    const b = el("button", "place" + (place === key ? " on" : ""));
+    b.type = "button"; b.setAttribute("aria-pressed", place === key);
+    b.append(document.createTextNode(label), el("b", null, String(n)));
+    b.onclick = () => {
+      place = key; LS.set("obora_miejsce", key || null);
+      if (!editId) $("miejsce").value = key && key !== NO_PLACE ? key : "";
+      render();
+    };
+    return b;
+  };
+  nav.append(chip("Wszystkie", "", cows.length));
+  [...counts.keys()].sort((a, b) => a.localeCompare(b, "pl")).forEach((p) => nav.append(chip(p, p, counts.get(p))));
+  if (none && counts.size) nav.append(chip("Bez miejsca", NO_PLACE, none));
+  const pl = $("placeList"); pl.replaceChildren(...[...counts.keys()].map((n) => { const o = document.createElement("option"); o.value = n; return o; }));
+}
+
 function fillBulls() {
   const names = [...new Set(cows.flatMap((c) => [c.ojciec, c.byk]).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const dl = $("bykList"); dl.replaceChildren(...names.map((n) => { const o = document.createElement("option"); o.value = n; return o; }));
 }
 
 function render() {
+  renderPlaces();
   renderAlerts();
   fillBulls();
+  const vis = visible();
   const q = $("szukaj").value.trim().toUpperCase();
   const list = $("list");
-  const sorted = [...cows].sort((a, b) => {
+  const sorted = [...vis].sort((a, b) => {
     const da = L.due(a), db_ = L.due(b);
     if (da && db_) return da < db_ ? -1 : 1;
     if (da) return -1; if (db_) return 1;
     return (a.kolczyk || "").localeCompare(b.kolczyk || "");
-  }).filter((c) => !q || [c.kolczyk, c.ojciec, c.byk].some((x) => (x || "").toUpperCase().includes(q)));
+  }).filter((c) => !q || [c.kolczyk, c.ojciec, c.byk, c.miejsce].some((x) => (x || "").toUpperCase().includes(q)));
 
   const today = L.todayISO();
-  $("sAll").textContent = cows.length;
-  $("sPreg").textContent = cows.filter((c) => L.pregnant(c)).length;
-  $("sSoon").textContent = cows.filter((c) => { const d = L.due(c); if (!d) return false; const n = L.daysBetween(today, d); return n >= 0 && n <= 30; }).length;
+  $("sAll").textContent = vis.length;
+  $("sPreg").textContent = vis.filter((c) => L.pregnant(c)).length;
+  $("sSoon").textContent = vis.filter((c) => { const d = L.due(c); if (!d) return false; const n = L.daysBetween(today, d); return n >= 0 && n <= 30; }).length;
 
   list.replaceChildren();
   if (!loaded) { list.append(el("div", "empty", "Ładowanie stada…")); return; }
   if (!cows.length) { list.append(el("div", "empty", "Brak krów. Wpisz numer kolczyka i daty w formularzu powyżej.")); return; }
-  if (!sorted.length) { list.append(el("div", "empty", "Brak krowy o takim kolczyku.")); return; }
+  if (!sorted.length) { list.append(el("div", "empty", q ? "Brak krowy pasującej do wyszukiwania." : "W tym miejscu nie ma krów.")); return; }
 
   for (const c of sorted) {
     const due = L.due(c);
@@ -266,6 +299,7 @@ function render() {
     const top = el("div", "cowtop");
     const left = el("div"); left.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap";
     left.append(el("span", "tag", c.kolczyk));
+    if (placeOf(c)) left.append(el("span", "loc", placeOf(c)));
     if (c.zacielenie && (L.pregnant(c) || c.cielna === "nie")) {
       const chip = el("span", "chip", c.cielna === "tak" ? "Cielna ✓" : c.cielna === "nie" ? "Niecielna" : "Do sprawdzenia");
       if (c.cielna === "tak") chip.classList.add("yes"); if (c.cielna === "nie") chip.classList.add("no");
@@ -325,6 +359,7 @@ function updatePreview() {
 }
 function resetForm() {
   editId = null; $("form").reset(); updatePreview();
+  if (place && place !== NO_PLACE) $("miejsce").value = place;
   $("formTitle").textContent = "Dodaj krowę"; $("saveBtn").textContent = "Zapisz krowę";
   $("cancelBtn").hidden = true; $("err").hidden = true;
 }
@@ -332,7 +367,7 @@ function startEdit(c, preset = {}) {
   editId = c.id;
   const v = { ...c, ...preset };
   $("kolczyk").value = v.kolczyk || ""; $("wycielenie").value = v.wycielenie || ""; $("ruja").value = v.ruja || ""; $("zacielenie").value = v.zacielenie || "";
-  $("ojciec").value = v.ojciec || ""; $("byk").value = preset.zacielenie && preset.zacielenie !== c.zacielenie ? "" : (v.byk || "");
+  $("ojciec").value = v.ojciec || ""; $("miejsce").value = v.miejsce || ""; $("byk").value = preset.zacielenie && preset.zacielenie !== c.zacielenie ? "" : (v.byk || "");
   updatePreview();
   $("formTitle").textContent = "Edytuj krowę"; $("saveBtn").textContent = "Zapisz zmiany"; $("cancelBtn").hidden = false;
   $("form").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -345,13 +380,13 @@ $("form").addEventListener("submit", (e) => {
   const showErr = (t) => { $("err").textContent = t; $("err").hidden = false; };
   const kolczyk = $("kolczyk").value.trim().toUpperCase().replace(/\s+/g, "");
   const wycielenie = $("wycielenie").value, ruja = $("ruja").value, zacielenie = $("zacielenie").value;
-  const ojciec = $("ojciec").value.trim(), byk = $("byk").value.trim();
+  const ojciec = $("ojciec").value.trim(), byk = $("byk").value.trim(), miejsce = $("miejsce").value.trim().replace(/\s+/g, " ");
   if (!kolczyk) return showErr("Wpisz numer kolczyka.");
   if (cows.some((c) => c.kolczyk === kolczyk && c.id !== editId)) return showErr("Krowa z tym kolczykiem już jest w stadzie. Użyj „Edytuj”.");
   const old = cows.find((c) => c.id === editId);
   const same = old && old.zacielenie === zacielenie;
   const data = {
-    kolczyk, ojciec, wycielenie, ruja, zacielenie, byk: zacielenie ? byk : "",
+    kolczyk, miejsce, ojciec, wycielenie, ruja, zacielenie, byk: zacielenie ? byk : "",
     cielna: same ? old.cielna || "" : "",
     zasuszona: same ? !!old.zasuszona : false,
     przegnana: same ? !!old.przegnana : false,
