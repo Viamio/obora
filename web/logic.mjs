@@ -69,8 +69,24 @@ export function alerts(cows, cfg, ahead, dueAhead, today = todayISO()) {
       const n = daysBetween(today, d);
       push(c, "due", d, n < 0 ? "Po terminie wycielenia" : "Wycielenie", `Termin ${fmt(d)}`, dueAhead);
     }
+    // karencja po wycieleniu (antybiotyk z zasuszenia)
+    const k = c.karencjaKoniec;
+    if (k && !c.karencjaOk && !hidden(c, "karencja", k)) {
+      const n = daysBetween(today, k);
+      const lek = c.karencjaLek ? `${c.karencjaLek} · ` : "";
+      if (n > 0) out.push({ cow: c, kind: "karencja", date: k, n, sort: -1000 + n, title: "Karencja – nie doić do sprzedaży, koniec", sub: `${lek}do ${fmt(k)} (jeszcze ${dni(n)})` });
+      else if (n >= -late) out.push({ cow: c, kind: "karencjaOk", date: k, n, sort: -900, title: "Koniec karencji – można doić", sub: `${lek}karencja skończyła się ${fmt(k)}` });
+    }
   }
-  return out.sort((a, b) => a.n - b.n);
+  return out.sort((a, b) => (a.sort ?? a.n) - (b.sort ?? b.n));
+}
+
+/** Koniec karencji po wycieleniu: od zasuszenia albo od wycielenia + liczba dni. */
+export function withdrawalEnd(c, calvedOn) {
+  const days = Number(c.karencja) || 0;
+  if (!days) return "";
+  const start = c.karencjaOd === "wycielenie" ? calvedOn : (c.zasuszonaData || calvedOn);
+  return addDays(start, days);
 }
 
 // ---------------- młodzież (cielęta, jałówki) ----------------

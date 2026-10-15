@@ -224,3 +224,7 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:color-mix(in
 .ahead{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .xclose{min-height:36px;min-width:36px;padding:4px 10px;font-size:1rem;color:var(--muted);border-color:transparent;background:transparent}
 .xclose:hover{border-color:var(--line)}
+.alert.good{border-left-color:var(--accent);background:color-mix(in srgb,var(--ok-bg) 70%,var(--surface))}
+.alert.good b{color:var(--accent)}
+.alert.kar{background:color-mix(in srgb,var(--soon-bg) 70%,var(--surface))}
+.alert.kar b{color:var(--soon)}

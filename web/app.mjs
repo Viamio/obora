@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "2.5";
+export const APP_VERSION = "2.6";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -209,7 +209,7 @@ async function testNotif() {
   status("Wysłano – sprawdź pasek powiadomień.");
 }
 const allAlerts = (cs, ks, ahead, dueAhead) =>
-  [...L.alerts(cs, cfg, ahead, dueAhead), ...L.calfAlerts(ks, cfg, ahead)].sort((a, b) => a.n - b.n);
+  [...L.alerts(cs, cfg, ahead, dueAhead), ...L.calfAlerts(ks, cfg, ahead)].sort((a, b) => (a.sort ?? a.n) - (b.sort ?? b.n));
 
 // ---------------- zapis ----------------
 const rowData = (c) => { const { id, ...r } = c; return r; };
@@ -428,7 +428,7 @@ function alertsSection(v, cs, ks, title = "Do zrobienia") {
   if (!list.length) box.append(el("div", "empty", cs.length + ks.length ? `Nic do zrobienia w najbliższych ${L.dni(cfg.ahead)}.` : "Tu pojawią się zadania: zacielenie, ruja, badanie cielności, zasuszenie, porodówka, wycielenie i krycie jałówek."));
   for (const a of list) {
     const c = a.cow;
-    const cls = a.kind === "due" || (a.n <= 0 && a.kind === "check") ? "soon" : a.n <= 0 ? "warn" : "";
+    const cls = a.kind === "karencja" ? "soon kar" : a.kind === "karencjaOk" ? "good" : a.kind === "due" || (a.n <= 0 && a.kind === "check") ? "soon" : a.n <= 0 ? "warn" : "";
     const row = el("div", "alert " + cls);
     const t = el("div", "atxt");
     t.append(el("b", null, `${a.title} ${L.kiedy(a.n)}`), el("small", null, a.sub + (placeOf(c) && !tab.startsWith("m:") ? ` · ${placeOf(c)}` : "")));
@@ -443,7 +443,8 @@ function alertsSection(v, cs, ks, title = "Do zrobienia") {
     if (a.kind === "move") ab.append(btn("Przegnana", "okbtn", () => patch(c, { przegnana: true }, `${c.kolczyk}: na porodówce`)));
     if (a.kind === "ruja") ab.append(btn("Grzeje się dziś", "nobtn", () => patch(c, { ruja: today }, `${c.kolczyk}: ruja zapisana`)), btn("Zacielona dziś", "okbtn", zacielona));
     if (a.kind === "insem") ab.append(btn("Zacielona dziś", "okbtn", zacielona));
-    if (a.kind === "due") ab.append(btn("Wycieliła się", "okbtn", () => patch(c, { wycielenie: today, zacielenie: "", byk: "", ruja: "", cielna: "", zasuszona: false, zasuszonaData: "", antybiotyk: "", przegnana: false }, `${c.kolczyk}: wycielenie zapisane`)));
+    if (a.kind === "due") ab.append(btn("Wycieliła się", "okbtn", () => calved(c, today)));
+    if (a.kind === "karencjaOk") ab.append(btn("OK, doję", "okbtn", () => patch(c, { karencjaOk: true }, `${c.kolczyk}: karencja zakończona`)));
     if (a.kind === "krycie") ab.append(btn("Zacielona dziś", "okbtn", () => toHerd(c, { zacielenie: today, ruja: today })), btn("Do stada krów", "nobtn", () => toHerd(c, {})));
     box.append(row);
   }
@@ -478,7 +479,11 @@ function cowCard(c) {
   const top = el("div", "cowtop");
   const left = el("div", "cowleft");
   left.append(el("span", "tag", c.kolczyk));
-  if (c.zasuszona) left.append(el("span", "chip dry", c.antybiotyk ? `Zasuszona · ${c.antybiotyk}` : "Zasuszona"));
+  if (c.zasuszona) left.append(el("span", "chip dry", [c.antybiotyk ? `Zasuszona · ${c.antybiotyk}` : "Zasuszona", c.karencja ? `karencja ${c.karencja} dni` : ""].filter(Boolean).join(" · ")));
+  if (c.karencjaKoniec && !c.karencjaOk) {
+    const kn = L.daysBetween(L.todayISO(), c.karencjaKoniec);
+    left.append(el("span", "chip " + (kn > 0 ? "no" : "yes"), kn > 0 ? `Karencja: jeszcze ${L.dni(kn)}` : "Można doić"));
+  }
   if (c.zacielenie && (L.pregnant(c) || c.cielna === "nie")) {
     const chip = el("span", "chip", c.cielna === "tak" ? "Cielna ✓" : c.cielna === "nie" ? "Niecielna" : "Do sprawdzenia");
     if (c.cielna === "tak") chip.classList.add("yes"); if (c.cielna === "nie") chip.classList.add("no");
@@ -738,6 +743,7 @@ function openCow(c, preset = {}) {
   $("form").reset(); $("err").hidden = true;
   $("kolczyk").value = v.kolczyk || ""; $("wycielenie").value = v.wycielenie || ""; $("ruja").value = v.ruja || ""; $("zacielenie").value = v.zacielenie || "";
   $("ojciec").value = v.ojciec || ""; $("antybiotyk").value = v.antybiotyk || "";
+  $("karencja").value = v.karencja || ""; $("karencjaOd").value = v.karencjaOd || "zasuszenie";
   $("byk").value = c && preset.zacielenie && preset.zacielenie !== c.zacielenie ? "" : (v.byk || "");
   placeSelect($("miejsce"), preset.miejsce != null ? preset.miejsce : c ? placeOf(c) : currentPlace());
   photoUi("k", c ? photoFor(c) : null);
@@ -771,7 +777,13 @@ $("form").addEventListener("submit", (e) => {
     antybiotyk,
   };
   if (antybiotyk && !data.zasuszonaData) data.zasuszonaData = L.todayISO();
+  data.karencja = data.zasuszona ? Math.max(0, parseInt($("karencja").value, 10) || 0) : 0;
+  data.karencjaOd = data.zasuszona ? $("karencjaOd").value : "";
   if (!data.zasuszona) { data.antybiotyk = ""; data.zasuszonaData = ""; }
+  // nowa data wycielenia wpisana ręcznie u zasuszonej krowy = wycielenie z karencją
+  if (old && old.zasuszona && wycielenie && wycielenie !== old.wycielenie && wycielenie >= (old.zasuszonaData || "")) {
+    Object.assign(data, calvingChanges({ ...old, ...data, zasuszona: true }, wycielenie), { wycielenie });
+  }
   const cid = editId || newId("k");
   data.foto = savePhoto("k", cid, old);
   writeCow(cid, data);
@@ -993,6 +1005,22 @@ function inseminate(q) {
   setTimeout(() => $("byk").focus(), 60);
 }
 
+// ---------------- wycielenie i karencja ----------------
+/** Zmiany przy wycieleniu: nowy cykl + wyliczenie końca karencji z antybiotyku z zasuszenia. */
+function calvingChanges(c, date) {
+  const koniec = c.zasuszona ? L.withdrawalEnd(c, date) : "";
+  return {
+    wycielenie: date, zacielenie: "", byk: "", ruja: "", cielna: "", przegnana: false,
+    zasuszona: false, zasuszonaData: "", antybiotyk: "", karencja: 0, karencjaOd: "",
+    karencjaKoniec: koniec, karencjaLek: koniec ? (c.antybiotyk || "") : "", karencjaOk: false,
+  };
+}
+function calved(c, date) {
+  const ch = calvingChanges(c, date);
+  const n = ch.karencjaKoniec ? L.daysBetween(L.todayISO(), ch.karencjaKoniec) : 0;
+  patch(c, ch, `${c.kolczyk}: wycielenie zapisane` + (ch.karencjaKoniec ? (n > 0 ? ` – karencja jeszcze ${L.dni(n)}, do ${L.fmt(ch.karencjaKoniec)}` : " – karencja już minęła, można doić") : ""));
+}
+
 // ---------------- zasuszenie ----------------
 let dryId = null;
 function openDry(c) {
@@ -1001,6 +1029,7 @@ function openDry(c) {
   $("dryCow").textContent = `Krowa ${c.kolczyk}${placeOf(c) ? " · " + placeOf(c) : ""}`;
   $("dryAnt").value = c.antybiotyk || "";
   $("dryDate").value = c.zasuszonaData || L.todayISO();
+  $("dryKar").value = c.karencja || ""; $("dryKarOd").value = c.karencjaOd || "zasuszenie";
   $("dryDlg").showModal();
   $("dryAnt").focus();
 }
@@ -1010,7 +1039,8 @@ $("dryForm").addEventListener("submit", (e) => {
   const c = cows.find((x) => x.id === dryId);
   if (!c) return $("dryDlg").close();
   const ant = $("dryAnt").value.trim();
-  patch(c, { zasuszona: true, antybiotyk: ant, zasuszonaData: $("dryDate").value || L.todayISO() },
+  const kar = Math.max(0, parseInt($("dryKar").value, 10) || 0);
+  patch(c, { zasuszona: true, antybiotyk: ant, zasuszonaData: $("dryDate").value || L.todayISO(), karencja: kar, karencjaOd: $("dryKarOd").value },
     `${c.kolczyk}: zasuszona${ant ? " – " + ant : ""}`);
   $("dryDlg").close();
 });
@@ -1033,7 +1063,7 @@ $("abortBtn").onclick = () => {
   const c = cows.find((x) => x.id === editId);
   if (!c) return;
   const today = L.todayISO();
-  patch(c, { wycielenie: today, wytrucie: today, zacielenie: "", byk: "", ruja: "", cielna: "", zasuszona: false, zasuszonaData: "", antybiotyk: "", przegnana: false },
+  patch(c, { ...calvingChanges(c, today), wytrucie: today },
     `${c.kolczyk}: wytrucie zapisane – niecielna, terminy od nowa.`);
   editId = null; $("cowDlg").close();
 };

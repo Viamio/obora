@@ -115,6 +115,14 @@
     <label for="antybiotyk">Antybiotyk przy zasuszeniu <small>(jeśli już zasuszona)</small>
       <input id="antybiotyk" autocomplete="off" list="antList" placeholder="nazwa preparatu">
     </label>
+    <div class="row2">
+      <label for="karencja">Karencja <small>(ile dni)</small>
+        <input id="karencja" type="number" inputmode="numeric" min="0" max="120" placeholder="np. 45">
+      </label>
+      <label for="karencjaOd">Liczona od
+        <select id="karencjaOd"><option value="zasuszenie">dnia zasuszenia</option><option value="wycielenie">dnia wycielenia</option></select>
+      </label>
+    </div>
     <div class="due"><span>Termin porodu<br>(+280 dni)</span><b id="dueOut">—</b></div>
     <div class="preview"><span>Sprawdzić cielność</span><b id="checkOut">—</b></div>
     <div class="preview"><span>Zasuszyć</span><b id="dryOut">—</b></div>
@@ -139,6 +147,14 @@
       <input id="dryAnt" autocomplete="off" list="antList" placeholder="nazwa preparatu">
     </label>
     <datalist id="antList"></datalist>
+    <div class="row2">
+      <label for="dryKar">Karencja <small>(ile dni)</small>
+        <input id="dryKar" type="number" inputmode="numeric" min="0" max="120" placeholder="np. 45">
+      </label>
+      <label for="dryKarOd">Liczona od
+        <select id="dryKarOd"><option value="zasuszenie">dnia zasuszenia</option><option value="wycielenie">dnia wycielenia</option></select>
+      </label>
+    </div>
     <label for="dryDate">Data zasuszenia
       <input id="dryDate" type="date">
     </label>
