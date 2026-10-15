@@ -97,7 +97,7 @@ export function ageText(born, today = todayISO()) {
   const m = monthsOld(born, today);
   if (m < 24) return `${m} mies.`;
   const y = Math.floor(m / 12), r = m % 12;
-  return r ? `${y} l. ${r} mies.` : `${y} lat`;
+  return (r ? `${y} l. ${r} mies.` : `${y} lat`) + ` (${m} mies.)`;
 }
 export const breedDate = (c, cfg) => (c.plec === "j" && c.urodzona ? addMonths(c.urodzona, cfg.krycie) : null);
 
