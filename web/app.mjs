@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "1.3";
+export const APP_VERSION = "1.4";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -326,11 +326,11 @@ function viewMain(v) {
   v.append(sum);
   v.append(statsRow(cows));
   alertsSection(v, cows, calves);
-  // wyszukiwarka całego stada
-  const s = el("input"); s.type = "search"; s.id = "szukaj"; s.placeholder = "Szukaj kolczyka lub byka w całym stadzie…"; s.value = query;
+  // pełna lista całego stada z wyszukiwarką
+  const s = el("input"); s.type = "search"; s.id = "szukaj"; s.placeholder = "Szukaj kolczyka, byka, matki…"; s.value = query;
   s.oninput = () => { query = s.value; renderSearch(); };
-  const res = el("div", "list"); res.id = "searchRes";
-  const sec = el("section", "col"); sec.append(el("h2", null, "Szukaj"), s, res); v.append(sec);
+  const res = el("div", "col"); res.id = "searchRes";
+  const sec = el("section", "col"); sec.append(el("h2", null, `Wszystkie zwierzęta (${all})`), s, res); v.append(sec);
   renderSearch();
 }
 function placeTile(label, key) {
@@ -345,12 +345,18 @@ function renderSearch() {
   const box = $("searchRes"); if (!box) return;
   box.replaceChildren();
   const q = query.trim().toUpperCase();
-  if (!q) return;
-  const hit = (a) => [a.kolczyk, a.ojciec, a.byk, a.matka].some((x) => (x || "").toUpperCase().includes(q));
-  const cs = cows.filter(hit), ks = calves.filter(hit);
-  if (!cs.length && !ks.length) { box.append(el("div", "empty", "Nic nie znaleziono.")); return; }
-  cs.forEach((c) => box.append(cowCard(c)));
-  ks.forEach((c) => box.append(calfCard(c)));
+  const hit = (a) => !q || [a.kolczyk, a.ojciec, a.byk, a.matka, a.miejsce].some((x) => (x || "").toUpperCase().includes(q));
+  const cs = sortCows(cows.filter(hit)), ks = sortCalves(calves.filter(hit));
+  if (!loaded) { box.append(el("div", "empty", "Ładowanie stada…")); return; }
+  if (!cs.length && !ks.length) { box.append(el("div", "empty", q ? "Nic nie znaleziono." : "Brak zwierząt. Dodaj pierwszą krowę przyciskiem na dole.")); return; }
+  if (cs.length) {
+    box.append(el("h3", "subh", `Krowy (${cs.length})`));
+    const l = el("div", "list"); cs.forEach((c) => l.append(cowCard(c))); box.append(l);
+  }
+  if (ks.length) {
+    box.append(el("h3", "subh", `Młodzież (${ks.length})`));
+    const l = el("div", "list"); ks.forEach((c) => l.append(calfCard(c))); box.append(l);
+  }
 }
 
 function viewPlace(v, key) {

@@ -179,3 +179,4 @@ fieldset.seg legend{font-weight:600;font-size:.9rem;margin-bottom:6px}
 fieldset.seg label{flex-direction:row;align-items:center;gap:8px;border:1.5px solid var(--line);border-radius:10px;padding:10px 14px;font-size:1rem}
 fieldset.seg input{width:auto}
 #szukaj{max-width:none;width:100%}
+.subh{font-family:var(--display);font-size:1.1rem;margin:4px 0 0;color:var(--muted)}
