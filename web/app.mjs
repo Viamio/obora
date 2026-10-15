@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "1.7";
+export const APP_VERSION = "1.8";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -356,7 +356,7 @@ function renderSearch() {
   const box = $("searchRes"); if (!box) return;
   box.replaceChildren();
   const q = query.trim().toUpperCase();
-  const hit = (a) => !q || [a.kolczyk, a.ojciec, a.byk, a.matka, a.miejsce].some((x) => (x || "").toUpperCase().includes(q));
+  const hit = (a) => !q || [a.kolczyk, a.ojciec, a.byk, a.matka, a.miejsce, a.antybiotyk].some((x) => (x || "").toUpperCase().includes(q));
   const cs = sortCows(cows.filter(hit)), ks = sortCalves(calves.filter(hit));
   if (!loaded) { box.append(el("div", "empty", "Ładowanie stada…")); return; }
   if (!cs.length && !ks.length) { box.append(el("div", "empty", q ? "Nic nie znaleziono." : "Brak zwierząt. Dodaj pierwszą krowę przyciskiem na dole.")); return; }
@@ -428,11 +428,11 @@ function alertsSection(v, cs, ks, title = "Do zrobienia") {
     row.append(el("span", "tag", c.kolczyk), t, ab);
     const zacielona = () => { openCow(c, { zacielenie: today, ruja: today }); status("Wpisz, jakim bykiem zacielona, i naciśnij Zapisz."); setTimeout(() => $("byk").focus(), 50); };
     if (a.kind === "check") ab.append(btn("Cielna", "okbtn", () => patch(c, { cielna: "tak" }, `${c.kolczyk}: cielna`)), btn("Niecielna", "nobtn", () => patch(c, { cielna: "nie" }, `${c.kolczyk}: niecielna`)));
-    if (a.kind === "dry") ab.append(btn("Zasuszona", "okbtn", () => patch(c, { zasuszona: true }, `${c.kolczyk}: zasuszona`)));
+    if (a.kind === "dry") ab.append(btn("Zasuszona", "okbtn", () => openDry(c)));
     if (a.kind === "move") ab.append(btn("Przegnana", "okbtn", () => patch(c, { przegnana: true }, `${c.kolczyk}: na porodówce`)));
     if (a.kind === "ruja") ab.append(btn("Grzeje się dziś", "nobtn", () => patch(c, { ruja: today }, `${c.kolczyk}: ruja zapisana`)), btn("Zacielona dziś", "okbtn", zacielona));
     if (a.kind === "insem") ab.append(btn("Zacielona dziś", "okbtn", zacielona));
-    if (a.kind === "due") ab.append(btn("Wycieliła się", "okbtn", () => patch(c, { wycielenie: today, zacielenie: "", byk: "", ruja: "", cielna: "", zasuszona: false, przegnana: false }, `${c.kolczyk}: wycielenie zapisane`)));
+    if (a.kind === "due") ab.append(btn("Wycieliła się", "okbtn", () => patch(c, { wycielenie: today, zacielenie: "", byk: "", ruja: "", cielna: "", zasuszona: false, zasuszonaData: "", antybiotyk: "", przegnana: false }, `${c.kolczyk}: wycielenie zapisane`)));
     if (a.kind === "krycie") ab.append(btn("Zacielona dziś", "okbtn", () => toHerd(c, { zacielenie: today, ruja: today })), btn("Do stada krów", "nobtn", () => toHerd(c, {})));
     box.append(row);
   }
@@ -490,7 +490,7 @@ function cowCard(c) {
     ["Następna ruja", L.fmt(L.nextRuja(c, today))],
     ["Zacielenie", L.fmt(c.zacielenie)],
     ["Sprawdzić cielność", L.fmt(L.checkDate(c, cfg))],
-    ["Zasuszenie", c.zasuszona ? "zrobione" : L.fmt(L.dryDate(c, cfg))],
+    ["Zasuszenie", c.zasuszona ? [c.zasuszonaData ? L.fmt(c.zasuszonaData) : "zrobione", c.antybiotyk].filter(Boolean).join(" · ") : L.fmt(L.dryDate(c, cfg))],
     ["Na porodówkę", c.przegnana ? "zrobione" : L.fmt(L.moveDate(c, cfg))],
     ["Termin porodu", L.fmt(due)],
   ];
@@ -683,13 +683,15 @@ function deletePlaceAsk(row, p, n) {
 }
 
 function fillLists() {
+  const ants = [...new Set(cows.map((c) => c.antybiotyk).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pl"));
+  $("antList").replaceChildren(...ants.map((n) => { const o = el("option"); o.value = n; return o; }));
   const bulls = [...new Set([...cows, ...calves].flatMap((c) => [c.ojciec, c.byk]).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   $("bykList").replaceChildren(...bulls.map((n) => { const o = el("option"); o.value = n; return o; }));
   $("matkiList").replaceChildren(...cows.map((c) => { const o = el("option"); o.value = c.kolczyk; return o; }));
 }
 
 // ---------------- formularz krowy ----------------
-function closeDialogs() { for (const id of ["cowDlg", "calfDlg", "pickDlg"]) { const d = $(id); if (d.open) d.close(); } }
+function closeDialogs() { for (const id of ["cowDlg", "calfDlg", "pickDlg", "dryDlg"]) { const d = $(id); if (d.open) d.close(); } }
 function currentPlace() { return tab.startsWith("m:") && tab !== "m:" + NO_PLACE ? tab.slice(2) : ""; }
 function updatePreview() {
   const z = $("zacielenie").value, r = $("ruja").value;
@@ -706,7 +708,7 @@ function openCow(c, preset = {}) {
   const v = { ...(c || {}), ...preset };
   $("form").reset(); $("err").hidden = true;
   $("kolczyk").value = v.kolczyk || ""; $("wycielenie").value = v.wycielenie || ""; $("ruja").value = v.ruja || ""; $("zacielenie").value = v.zacielenie || "";
-  $("ojciec").value = v.ojciec || "";
+  $("ojciec").value = v.ojciec || ""; $("antybiotyk").value = v.antybiotyk || "";
   $("byk").value = c && preset.zacielenie && preset.zacielenie !== c.zacielenie ? "" : (v.byk || "");
   placeSelect($("miejsce"), c ? placeOf(c) : currentPlace());
   updatePreview();
@@ -725,7 +727,7 @@ $("form").addEventListener("submit", (e) => {
   const showErr = (t) => { $("err").textContent = t; $("err").hidden = false; };
   const kolczyk = $("kolczyk").value.trim().toUpperCase().replace(/\s+/g, "");
   const wycielenie = $("wycielenie").value, ruja = $("ruja").value, zacielenie = $("zacielenie").value;
-  const ojciec = $("ojciec").value.trim(), byk = $("byk").value.trim(), miejsce = $("miejsce").value;
+  const ojciec = $("ojciec").value.trim(), byk = $("byk").value.trim(), miejsce = $("miejsce").value, antybiotyk = $("antybiotyk").value.trim();
   if (!kolczyk) return showErr("Wpisz numer kolczyka.");
   if (cows.some((c) => c.kolczyk === kolczyk && c.id !== editId)) return showErr("Krowa z tym kolczykiem już jest w stadzie.");
   const old = cows.find((c) => c.id === editId);
@@ -734,13 +736,38 @@ $("form").addEventListener("submit", (e) => {
     ...(old ? rowData(old) : {}),
     kolczyk, miejsce, ojciec, wycielenie, ruja, zacielenie, byk: zacielenie ? byk : "",
     cielna: same ? old.cielna || "" : "",
-    zasuszona: same ? !!old.zasuszona : false,
+    zasuszona: (same ? !!old.zasuszona : false) || !!antybiotyk,
     przegnana: same ? !!old.przegnana : false,
+    antybiotyk,
   };
+  if (antybiotyk && !data.zasuszonaData) data.zasuszonaData = L.todayISO();
+  if (!data.zasuszona) { data.antybiotyk = ""; data.zasuszonaData = ""; }
   writeCow(editId || newId("k"), data);
   status(editId ? `Zapisano zmiany: ${kolczyk}` : `Dodano: ${kolczyk}${miejsce ? " → " + miejsce : ""}`);
   editId = null;
   $("cowDlg").close();
+});
+
+// ---------------- zasuszenie ----------------
+let dryId = null;
+function openDry(c) {
+  closeDialogs();
+  dryId = c.id;
+  $("dryCow").textContent = `Krowa ${c.kolczyk}${placeOf(c) ? " · " + placeOf(c) : ""}`;
+  $("dryAnt").value = c.antybiotyk || "";
+  $("dryDate").value = c.zasuszonaData || L.todayISO();
+  $("dryDlg").showModal();
+  $("dryAnt").focus();
+}
+$("dryCancel").onclick = () => $("dryDlg").close();
+$("dryForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const c = cows.find((x) => x.id === dryId);
+  if (!c) return $("dryDlg").close();
+  const ant = $("dryAnt").value.trim();
+  patch(c, { zasuszona: true, antybiotyk: ant, zasuszonaData: $("dryDate").value || L.todayISO() },
+    `${c.kolczyk}: zasuszona${ant ? " – " + ant : ""}`);
+  $("dryDlg").close();
 });
 
 // ---------------- wytrucie ----------------
@@ -761,7 +788,7 @@ $("abortBtn").onclick = () => {
   const c = cows.find((x) => x.id === editId);
   if (!c) return;
   const today = L.todayISO();
-  patch(c, { wycielenie: today, wytrucie: today, zacielenie: "", byk: "", ruja: "", cielna: "", zasuszona: false, przegnana: false },
+  patch(c, { wycielenie: today, wytrucie: today, zacielenie: "", byk: "", ruja: "", cielna: "", zasuszona: false, zasuszonaData: "", antybiotyk: "", przegnana: false },
     `${c.kolczyk}: wytrucie zapisane – niecielna, terminy od nowa.`);
   editId = null; $("cowDlg").close();
 };

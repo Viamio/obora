@@ -104,6 +104,9 @@
       <input id="byk" autocomplete="off" list="bykList" placeholder="nazwa lub numer byka">
     </label>
     <datalist id="bykList"></datalist>
+    <label for="antybiotyk">Antybiotyk przy zasuszeniu <small>(jeśli już zasuszona)</small>
+      <input id="antybiotyk" autocomplete="off" list="antList" placeholder="nazwa preparatu">
+    </label>
     <div class="due"><span>Termin porodu<br>(+280 dni)</span><b id="dueOut">—</b></div>
     <div class="preview"><span>Sprawdzić cielność</span><b id="checkOut">—</b></div>
     <div class="preview"><span>Zasuszyć</span><b id="dryOut">—</b></div>
@@ -116,6 +119,22 @@
       <button type="button" class="ghost danger" id="abortBtn">Wytrucie</button>
       <small id="abortHint">Krowa będzie niecielna, a terminy liczą się od nowa – jak po wycieleniu.</small>
     </div>
+  </form>
+</dialog>
+
+<!-- Zasuszenie: jakim antybiotykiem -->
+<dialog class="sheet" id="dryDlg" aria-labelledby="dryTitle">
+  <form id="dryForm" novalidate>
+    <div class="sheethead"><h2 id="dryTitle">Zasuszenie</h2><button type="button" class="ghost x" id="dryCancel" aria-label="Zamknij">✕</button></div>
+    <p class="hint" id="dryCow"></p>
+    <label for="dryAnt">Jakim antybiotykiem zapuszczona
+      <input id="dryAnt" autocomplete="off" list="antList" placeholder="nazwa preparatu">
+    </label>
+    <datalist id="antList"></datalist>
+    <label for="dryDate">Data zasuszenia
+      <input id="dryDate" type="date">
+    </label>
+    <div class="actions"><button type="submit" class="primary" id="drySave">Zapisz zasuszenie</button></div>
   </form>
 </dialog>
 
