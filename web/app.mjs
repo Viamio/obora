@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "1.6";
+export const APP_VERSION = "1.7";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -131,7 +131,8 @@ function start(code) {
   unsub.push(onSnapshot(cowsCol(code), (snap) => {
     cows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     loaded = true;
-    status(snap.metadata.fromCache ? "Bez internetu – zmiany wyślą się później." : "");
+    const off = "Bez internetu – zmiany wyślą się później.";
+    if (snap.metadata.fromCache) status(off); else if ($("status").textContent === off) status("");
     render();
   }, () => status("Brak dostępu do bazy. Sprawdź internet.")));
   unsub.push(onSnapshot(calvesCol(code), (snap) => {
@@ -484,7 +485,7 @@ function cowCard(c) {
   const items = [
     ["Po byku", c.ojciec || "—"],
     ["Zacielona bykiem", c.byk || "—"],
-    ["Ost. wycielenie", L.fmt(c.wycielenie)],
+    [c.wytrucie && c.wytrucie === c.wycielenie ? "Wytrucie" : "Ost. wycielenie", L.fmt(c.wycielenie)],
     ["Ostatnia ruja", L.fmt(c.ruja)],
     ["Następna ruja", L.fmt(L.nextRuja(c, today))],
     ["Zacielenie", L.fmt(c.zacielenie)],
@@ -711,6 +712,8 @@ function openCow(c, preset = {}) {
   updatePreview();
   $("formTitle").textContent = c ? "Edytuj krowę" : "Dodaj krowę";
   $("saveBtn").textContent = c ? "Zapisz zmiany" : "Zapisz krowę";
+  armAbort("abortBtn", "abortHint", "Krowa będzie niecielna, a terminy liczą się od nowa – jak po wycieleniu.");
+  $("abortBox").hidden = !c;
   $("cowDlg").showModal();
   if (!c) $("kolczyk").focus();
 }
@@ -740,6 +743,41 @@ $("form").addEventListener("submit", (e) => {
   $("cowDlg").close();
 });
 
+// ---------------- wytrucie ----------------
+/** Przycisk z potwierdzeniem: pierwsze stuknięcie pyta, drugie wykonuje. */
+function armAbort(btnId, hintId, hint) {
+  const b = $(btnId); b.dataset.armed = ""; b.textContent = "Wytrucie"; b.classList.remove("del");
+  $(hintId).textContent = hint;
+}
+function confirmAbort(btnId, hintId) {
+  const b = $(btnId);
+  if (b.dataset.armed) return true;
+  b.dataset.armed = "1"; b.textContent = "Tak, potwierdzam wytrucie"; b.classList.add("del");
+  $(hintId).textContent = "Stuknij jeszcze raz, żeby potwierdzić.";
+  return false;
+}
+$("abortBtn").onclick = () => {
+  if (!confirmAbort("abortBtn", "abortHint")) return;
+  const c = cows.find((x) => x.id === editId);
+  if (!c) return;
+  const today = L.todayISO();
+  patch(c, { wycielenie: today, wytrucie: today, zacielenie: "", byk: "", ruja: "", cielna: "", zasuszona: false, przegnana: false },
+    `${c.kolczyk}: wytrucie zapisane – niecielna, terminy od nowa.`);
+  editId = null; $("cowDlg").close();
+};
+$("cAbortBtn").onclick = () => {
+  if (!confirmAbort("cAbortBtn", "cAbortHint")) return;
+  const c = calves.find((x) => x.id === calfEditId);
+  if (!c) return;
+  if (cows.some((x) => x.kolczyk === c.kolczyk)) { status("Krowa z tym kolczykiem już jest w stadzie."); return; }
+  const today = L.todayISO();
+  writeCow(c.id, { kolczyk: c.kolczyk, miejsce: c.miejsce || "", ojciec: c.ojciec || "", urodzona: c.urodzona || "", matka: c.matka || "",
+    wycielenie: today, wytrucie: today, ruja: "", zacielenie: "", byk: "", cielna: "", zasuszona: false, przegnana: false });
+  deleteDoc(doc(calvesCol(farm), c.id)).catch(() => {});
+  status(`${c.kolczyk}: wytrucie zapisane – przeniesiona do krów, terminy od dziś.`);
+  $("calfDlg").close();
+};
+
 // ---------------- formularz młodzieży ----------------
 function updateCalfPreview() {
   const born = $("cUrodzona").value, j = calfMode === "jalowka" || $("cJ").checked;
@@ -759,6 +797,8 @@ function openCalf(c, mode) {
   (c?.plec === "b" ? $("cB") : $("cJ")).checked = true;
   placeSelect($("cMiejsce"), c ? placeOf(c) : currentPlace());
   $("calfTitle").textContent = (c ? "Edytuj " : "Dodaj ") + (calfMode === "cielak" ? "cielaka" : "jałówkę");
+  armAbort("cAbortBtn", "cAbortHint", "Jałówka przejdzie do krów jak po wycieleniu – terminy liczą się od dziś.");
+  $("cAbortBox").hidden = !(c && calfMode === "jalowka");
   updateCalfPreview();
   $("calfDlg").showModal();
   if (!c) $("cKolczyk").focus();

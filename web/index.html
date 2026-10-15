@@ -112,6 +112,10 @@
     <div class="actions">
       <button type="submit" class="primary" id="saveBtn">Zapisz krowę</button>
     </div>
+    <div class="abort" id="abortBox" hidden>
+      <button type="button" class="ghost danger" id="abortBtn">Wytrucie</button>
+      <small id="abortHint">Krowa będzie niecielna, a terminy liczą się od nowa – jak po wycieleniu.</small>
+    </div>
   </form>
 </dialog>
 
@@ -158,6 +162,10 @@
     <div class="due" id="cBreedBox"><span>Gotowa do krycia<br>(<span id="cKrycieM">14</span> mies.)</span><b id="cBreedOut">—</b></div>
     <p class="err" id="cErr" hidden></p>
     <div class="actions"><button type="submit" class="primary" id="cSave">Zapisz</button></div>
+    <div class="abort" id="cAbortBox" hidden>
+      <button type="button" class="ghost danger" id="cAbortBtn">Wytrucie</button>
+      <small id="cAbortHint">Jałówka przejdzie do krów jak po wycieleniu – terminy liczą się od dziś.</small>
+    </div>
   </form>
 </dialog>
 <script type="module" src="app.mjs"></script>
