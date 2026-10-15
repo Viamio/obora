@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "1.0";
+export const APP_VERSION = "1.1";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -222,19 +222,25 @@ function renderAlerts() {
     t.append(el("b", null, `${a.title} ${L.kiedy(a.n)}`), el("small", null, a.sub));
     const ab = el("div", "abtns");
     row.append(el("span", "tag", c.kolczyk), t, ab);
-    const zacielona = () => patch(c, { zacielenie: today, ruja: today, cielna: "", zasuszona: false, przegnana: false }, `${c.kolczyk}: zacielona dziś`);
+    const zacielona = () => { startEdit(c, { zacielenie: today, ruja: today }); status("Wpisz, jakim bykiem zacielona, i naciśnij Zapisz."); $("byk").focus(); };
     if (a.kind === "check") ab.append(btn("Cielna", "okbtn", () => patch(c, { cielna: "tak" }, `${c.kolczyk}: cielna`)), btn("Niecielna", "nobtn", () => patch(c, { cielna: "nie" }, `${c.kolczyk}: niecielna`)));
     if (a.kind === "dry") ab.append(btn("Zasuszona", "okbtn", () => patch(c, { zasuszona: true }, `${c.kolczyk}: zasuszona`)));
     if (a.kind === "move") ab.append(btn("Przegnana", "okbtn", () => patch(c, { przegnana: true }, `${c.kolczyk}: na porodówce`)));
     if (a.kind === "ruja") ab.append(btn("Grzeje się dziś", "nobtn", () => patch(c, { ruja: today }, `${c.kolczyk}: ruja zapisana`)), btn("Zacielona dziś", "okbtn", zacielona));
     if (a.kind === "insem") ab.append(btn("Zacielona dziś", "okbtn", zacielona));
-    if (a.kind === "due") ab.append(btn("Wycieliła się", "okbtn", () => patch(c, { wycielenie: today, zacielenie: "", ruja: "", cielna: "", zasuszona: false, przegnana: false }, `${c.kolczyk}: wycielenie zapisane`)));
+    if (a.kind === "due") ab.append(btn("Wycieliła się", "okbtn", () => patch(c, { wycielenie: today, zacielenie: "", byk: "", ruja: "", cielna: "", zasuszona: false, przegnana: false }, `${c.kolczyk}: wycielenie zapisane`)));
     box.append(row);
   }
 }
 
+function fillBulls() {
+  const names = [...new Set(cows.flatMap((c) => [c.ojciec, c.byk]).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const dl = $("bykList"); dl.replaceChildren(...names.map((n) => { const o = document.createElement("option"); o.value = n; return o; }));
+}
+
 function render() {
   renderAlerts();
+  fillBulls();
   const q = $("szukaj").value.trim().toUpperCase();
   const list = $("list");
   const sorted = [...cows].sort((a, b) => {
@@ -242,7 +248,7 @@ function render() {
     if (da && db_) return da < db_ ? -1 : 1;
     if (da) return -1; if (db_) return 1;
     return (a.kolczyk || "").localeCompare(b.kolczyk || "");
-  }).filter((c) => !q || (c.kolczyk || "").toUpperCase().includes(q));
+  }).filter((c) => !q || [c.kolczyk, c.ojciec, c.byk].some((x) => (x || "").toUpperCase().includes(q)));
 
   const today = L.todayISO();
   $("sAll").textContent = cows.length;
@@ -277,6 +283,8 @@ function render() {
 
     const dl = el("dl");
     const items = [
+      ["Po byku", c.ojciec || "—"],
+      ["Zacielona bykiem", c.byk || "—"],
       ["Ost. wycielenie", L.fmt(c.wycielenie)],
       ["Ostatnia ruja", L.fmt(c.ruja)],
       ["Następna ruja", L.fmt(L.nextRuja(c, today))],
@@ -320,9 +328,11 @@ function resetForm() {
   $("formTitle").textContent = "Dodaj krowę"; $("saveBtn").textContent = "Zapisz krowę";
   $("cancelBtn").hidden = true; $("err").hidden = true;
 }
-function startEdit(c) {
+function startEdit(c, preset = {}) {
   editId = c.id;
-  $("kolczyk").value = c.kolczyk || ""; $("wycielenie").value = c.wycielenie || ""; $("ruja").value = c.ruja || ""; $("zacielenie").value = c.zacielenie || "";
+  const v = { ...c, ...preset };
+  $("kolczyk").value = v.kolczyk || ""; $("wycielenie").value = v.wycielenie || ""; $("ruja").value = v.ruja || ""; $("zacielenie").value = v.zacielenie || "";
+  $("ojciec").value = v.ojciec || ""; $("byk").value = preset.zacielenie && preset.zacielenie !== c.zacielenie ? "" : (v.byk || "");
   updatePreview();
   $("formTitle").textContent = "Edytuj krowę"; $("saveBtn").textContent = "Zapisz zmiany"; $("cancelBtn").hidden = false;
   $("form").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -335,12 +345,13 @@ $("form").addEventListener("submit", (e) => {
   const showErr = (t) => { $("err").textContent = t; $("err").hidden = false; };
   const kolczyk = $("kolczyk").value.trim().toUpperCase().replace(/\s+/g, "");
   const wycielenie = $("wycielenie").value, ruja = $("ruja").value, zacielenie = $("zacielenie").value;
+  const ojciec = $("ojciec").value.trim(), byk = $("byk").value.trim();
   if (!kolczyk) return showErr("Wpisz numer kolczyka.");
   if (cows.some((c) => c.kolczyk === kolczyk && c.id !== editId)) return showErr("Krowa z tym kolczykiem już jest w stadzie. Użyj „Edytuj”.");
   const old = cows.find((c) => c.id === editId);
   const same = old && old.zacielenie === zacielenie;
   const data = {
-    kolczyk, wycielenie, ruja, zacielenie,
+    kolczyk, ojciec, wycielenie, ruja, zacielenie, byk: zacielenie ? byk : "",
     cielna: same ? old.cielna || "" : "",
     zasuszona: same ? !!old.zasuszona : false,
     przegnana: same ? !!old.przegnana : false,

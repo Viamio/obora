@@ -85,6 +85,9 @@
       <label for="kolczyk">Numer kolczyka
         <input id="kolczyk" autocomplete="off" autocapitalize="characters" placeholder="np. PL005123456789">
       </label>
+      <label for="ojciec">Po jakim byku <small>(ojciec krowy, opcjonalnie)</small>
+        <input id="ojciec" autocomplete="off" list="bykList" placeholder="nazwa lub numer byka">
+      </label>
       <div class="row2">
         <label for="wycielenie">Ostatnie wycielenie <small>(opcjonalnie)</small>
           <input id="wycielenie" type="date">
@@ -97,6 +100,10 @@
       <label for="zacielenie">Data zacielenia <small>(inseminacja / krycie)</small>
         <input id="zacielenie" type="date">
       </label>
+      <label for="byk">Jakim bykiem zacielona <small>(nasienie / byk)</small>
+        <input id="byk" autocomplete="off" list="bykList" placeholder="nazwa lub numer byka">
+      </label>
+      <datalist id="bykList"></datalist>
       <div class="due"><span>Termin porodu<br>(+280 dni)</span><b id="dueOut">—</b></div>
       <div class="preview"><span>Sprawdzić cielność</span><b id="checkOut">—</b></div>
       <div class="preview"><span>Zasuszyć</span><b id="dryOut">—</b></div>
@@ -111,7 +118,7 @@
     <section style="display:flex;flex-direction:column;gap:12px">
       <div class="listhead">
         <h2>Stado</h2>
-        <input id="szukaj" type="search" placeholder="Szukaj kolczyka…" aria-label="Szukaj kolczyka">
+        <input id="szukaj" type="search" placeholder="Szukaj kolczyka lub byka…" aria-label="Szukaj kolczyka lub byka">
       </div>
       <div class="list" id="list"><div class="empty">Ładowanie stada…</div></div>
     </section>
