@@ -3,7 +3,7 @@
 
 export const GESTATION = 280;
 export const CYCLE = 21;
-export const DEFAULT_CFG = { dry: 60, move: 10, check: 35, vwp: 60, ahead: 3, hour: 6, krycie: 14, zalegle: 30, miejsca: [] };
+export const DEFAULT_CFG = { dry: 60, move: 10, check: 30, vwp: 60, ahead: 3, hour: 6, krycie: 14, zalegle: 30, miejsca: [] };
 const DAY = 86400000;
 
 export function todayISO(tz = "Europe/Warsaw") {

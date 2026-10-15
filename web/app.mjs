@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "2.7";
+export const APP_VERSION = "2.8";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -148,6 +148,7 @@ function start(code) {
   }, () => {}));
   unsub.push(onSnapshot(cfgDocRef(code), (s) => {
     cfg = L.cfgOf(s.data()); cfgLoaded = true;
+    if (s.exists() && s.data().check === 35 && !s.data().checkV2) saveCfg({ ...cfg, check: 30, checkV2: 1 });
     const active = document.activeElement?.id || "";
     if (tab === "ustawienia" && active.startsWith("set")) return; // nie przerywaj wpisywania
     updatePreview(); render();
@@ -530,6 +531,9 @@ function cowCard(c) {
     btns.append(q2, btn("Nie", "ghost", () => { confirmId = null; render(); }), btn("Tak, usuń", "del", () => removeCow(c.id)));
   } else {
     if (c.zacielenie && c.cielna) btns.append(btn("Cofnij badanie", "ghost", () => patch(c, { cielna: "" }, `${c.kolczyk}: wynik cofnięty`)));
+    if (c.zacielenie && !c.cielna) btns.append(
+      btn("Cielna ✓", "okbtn", () => patch(c, { cielna: "tak" }, `${c.kolczyk}: cielna`)),
+      btn("Niecielna", "ghost", () => patch(c, { cielna: "nie" }, `${c.kolczyk}: niecielna`)));
     btns.append(btn("Edytuj", "ghost", () => openCow(c)), btn("Usuń", "ghost", () => { confirmId = c.id; render(); }));
   }
   foot.append(btns);
@@ -757,6 +761,8 @@ function openCow(c, preset = {}) {
   $("kolczyk").value = v.kolczyk || ""; $("wycielenie").value = v.wycielenie || ""; $("ruja").value = v.ruja || ""; $("zacielenie").value = v.zacielenie || "";
   $("ojciec").value = v.ojciec || ""; $("antybiotyk").value = v.antybiotyk || "";
   $("karencja").value = v.karencja || ""; $("karencjaOd").value = v.karencjaOd || "zasuszenie";
+  $("cielnaSel").value = c && !(preset.zacielenie && preset.zacielenie !== c.zacielenie) ? (c.cielna || "") : "";
+  $("zasData").value = v.zasuszona ? (v.zasuszonaData || "") : "";
   $("byk").value = c && preset.zacielenie && preset.zacielenie !== c.zacielenie ? "" : (v.byk || "");
   placeSelect($("miejsce"), preset.miejsce != null ? preset.miejsce : c ? placeOf(c) : currentPlace());
   photoUi("k", c ? photoFor(c) : null);
@@ -769,6 +775,7 @@ function openCow(c, preset = {}) {
   if (!c) $("kolczyk").focus();
 }
 ["zacielenie", "ruja"].forEach((id) => $(id).addEventListener("input", updatePreview));
+$("zacielenie").addEventListener("input", () => { $("cielnaSel").value = ""; });
 $("cancelBtn").onclick = () => { editId = null; $("cowDlg").close(); };
 $("cowDlg").addEventListener("close", () => { editId = null; editSeed = null; queueDoneId = null; });
 $("form").addEventListener("submit", (e) => {
@@ -784,12 +791,13 @@ $("form").addEventListener("submit", (e) => {
   const data = {
     ...(old ? rowData(old) : {}),
     kolczyk, miejsce, ojciec, wycielenie, ruja, zacielenie, byk: zacielenie ? byk : "",
-    cielna: same ? old.cielna || "" : "",
-    zasuszona: (same ? !!old.zasuszona : false) || !!antybiotyk,
+    cielna: zacielenie ? $("cielnaSel").value : "",
+    zasuszona: !!$("zasData").value || (same ? !!old.zasuszona : false) || !!antybiotyk,
     przegnana: same ? !!old.przegnana : false,
     antybiotyk,
   };
-  if (antybiotyk && !data.zasuszonaData) data.zasuszonaData = L.todayISO();
+  if ($("zasData").value) data.zasuszonaData = $("zasData").value;
+  if (data.zasuszona && !data.zasuszonaData) data.zasuszonaData = L.todayISO();
   data.karencja = data.zasuszona ? Math.max(0, parseInt($("karencja").value, 10) || 0) : 0;
   data.karencjaOd = data.zasuszona ? $("karencjaOd").value : "";
   if (!data.zasuszona) { data.antybiotyk = ""; data.zasuszonaData = ""; }
