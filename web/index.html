@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Obora</title>
+<meta name="theme-color" content="#3d6b2f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Obora">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="ikona-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script src="config.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Obora</h1>
+    <p class="sub">Kolczyk, wycielenie, ruja, zacielenie. Terminy liczą się same.</p>
+  </header>
+
+  <div class="bar hi" id="updBar" hidden>
+    <p><b>Nowa wersja aplikacji.</b> Naciśnij, żeby zainstalować.</p>
+    <button class="primary" id="updBtn" style="flex:0">Aktualizuj</button>
+  </div>
+
+  <div class="bar" id="iosBar" hidden>
+    <p>Żeby mieć ikonę i powiadomienia na iPhonie: stuknij <b>Udostępnij</b> (kwadrat ze strzałką na dole Safari), potem <b>Do ekranu początkowego</b>. Dalej otwieraj aplikację z ikony.</p>
+  </div>
+  <div class="bar" id="installBar" hidden>
+    <p>Zainstaluj aplikację na tym telefonie: będzie ikona na ekranie.</p>
+    <button class="primary" id="installBtn" style="flex:0">Zainstaluj</button>
+  </div>
+
+  <p class="err" id="cfgErr" hidden>Aplikacja nie jest jeszcze połączona z bazą danych.</p>
+
+  <!-- Pierwsze uruchomienie: kod gospodarstwa -->
+  <section class="setup" id="setup" hidden>
+    <div class="card">
+      <h2>Witaj w Oborze</h2>
+      <p class="hint" style="font-size:.95rem">Wszyscy w domu widzą to samo stado. Pierwszy telefon zakłada gospodarstwo, kolejne wpisują jego kod.</p>
+      <div id="newCodeBox" hidden>
+        <p style="margin:0">Kod Twojego gospodarstwa:</p>
+        <div class="code" id="newCode"></div>
+        <p class="hint">Zapisz go. Na innych telefonach wpisz go w „Mam kod”. Znajdziesz go też później w Ustawieniach.</p>
+        <button class="primary" id="newCodeOk" style="width:100%">Dalej</button>
+      </div>
+      <button class="primary" id="createFarm">Załóż nowe gospodarstwo</button>
+    </div>
+    <form class="card" id="joinForm" novalidate>
+      <h2>Mam kod</h2>
+      <label for="joinCode">Kod gospodarstwa
+        <input id="joinCode" autocomplete="off" autocapitalize="characters" placeholder="np. ABCD-EFGH-JKLM">
+      </label>
+      <p class="err" id="joinErr" hidden></p>
+      <button type="submit" class="ghost" id="joinBtn">Połącz z gospodarstwem</button>
+    </form>
+  </section>
+
+  <!-- Aplikacja -->
+  <main id="app" hidden style="display:flex;flex-direction:column;gap:18px">
+    <div class="bar" id="notifBar" hidden>
+      <p><b>Powiadomienia są wyłączone.</b> Włącz je, żeby rano dostawać listę zadań na pasku telefonu.</p>
+      <button class="primary" id="notifBtn" style="flex:0">Włącz</button>
+    </div>
+
+    <div class="stats" aria-label="Podsumowanie">
+      <div class="stat"><b id="sAll">0</b><span>Krów</span></div>
+      <div class="stat"><b id="sPreg">0</b><span>Zacielonych</span></div>
+      <div class="stat"><b id="sSoon">0</b><span>Poród ≤ 30 dni</span></div>
+    </div>
+
+    <section style="display:flex;flex-direction:column;gap:10px">
+      <h2>Do zrobienia</h2>
+      <div class="alerts" id="alerts"></div>
+    </section>
+
+    <form id="form" novalidate>
+      <h2 id="formTitle">Dodaj krowę</h2>
+      <label for="kolczyk">Numer kolczyka
+        <input id="kolczyk" autocomplete="off" autocapitalize="characters" placeholder="np. PL005123456789">
+      </label>
+      <div class="row2">
+        <label for="wycielenie">Ostatnie wycielenie <small>(opcjonalnie)</small>
+          <input id="wycielenie" type="date">
+        </label>
+        <label for="ruja">Ostatnia ruja <small>(kiedy grzała się)</small>
+          <input id="ruja" type="date">
+        </label>
+      </div>
+      <div class="preview"><span>Następna ruja (+21 dni)</span><b id="rujaOut">—</b></div>
+      <label for="zacielenie">Data zacielenia <small>(inseminacja / krycie)</small>
+        <input id="zacielenie" type="date">
+      </label>
+      <div class="due"><span>Termin porodu<br>(+280 dni)</span><b id="dueOut">—</b></div>
+      <div class="preview"><span>Sprawdzić cielność</span><b id="checkOut">—</b></div>
+      <div class="preview"><span>Zasuszyć</span><b id="dryOut">—</b></div>
+      <div class="preview"><span>Przegnać na porodówkę</span><b id="moveOut">—</b></div>
+      <p class="err" id="err" hidden></p>
+      <div class="actions">
+        <button type="submit" class="primary" id="saveBtn">Zapisz krowę</button>
+        <button type="button" class="ghost" id="cancelBtn" hidden>Anuluj</button>
+      </div>
+    </form>
+
+    <section style="display:flex;flex-direction:column;gap:12px">
+      <div class="listhead">
+        <h2>Stado</h2>
+        <input id="szukaj" type="search" placeholder="Szukaj kolczyka…" aria-label="Szukaj kolczyka">
+      </div>
+      <div class="list" id="list"><div class="empty">Ładowanie stada…</div></div>
+    </section>
+
+    <details class="settings" id="settingsBox">
+      <summary>Ustawienia</summary>
+      <div class="sbody">
+        <p class="hint">Wspólne dla całego gospodarstwa:</p>
+        <label for="setDry">Zasuszenie: dni przed porodem
+          <span class="numrow"><input id="setDry" type="number" inputmode="numeric" min="1" max="120"><span>dni</span></span></label>
+        <label for="setMove">Porodówka: dni przed porodem
+          <span class="numrow"><input id="setMove" type="number" inputmode="numeric" min="1" max="60"><span>dni</span></span></label>
+        <label for="setCheck">Badanie cielności: dni po zacieleniu
+          <span class="numrow"><input id="setCheck" type="number" inputmode="numeric" min="1" max="120"><span>dni</span></span></label>
+        <label for="setVwp">Zacielić: dni po wycieleniu
+          <span class="numrow"><input id="setVwp" type="number" inputmode="numeric" min="1" max="200"><span>dni</span></span></label>
+        <label for="setAhead">Pokazuj zadania z wyprzedzeniem
+          <span class="numrow"><input id="setAhead" type="number" inputmode="numeric" min="0" max="30"><span>dni</span></span></label>
+        <label for="setHour">Godzina porannego powiadomienia
+          <span class="numrow"><input id="setHour" type="number" inputmode="numeric" min="0" max="23"><span>:00</span></span></label>
+        <p class="hint" id="setMsg">Zmiany zapisują się same.</p>
+        <div class="row">
+          <button type="button" class="ghost" id="testNotif">Próbne powiadomienie</button>
+          <button type="button" class="ghost" id="checkUpd">Sprawdź aktualizacje</button>
+        </div>
+        <p class="hint" style="margin-top:6px">Kod gospodarstwa (wpisz go na innych telefonach):</p>
+        <div class="row"><span class="code" id="farmCode" style="font-size:1.5rem"></span><button type="button" class="ghost" id="copyCode">Kopiuj</button></div>
+        <div id="leaveBox">
+          <button type="button" class="ghost" id="leaveBtn">Przełącz na inne gospodarstwo</button>
+        </div>
+      </div>
+    </details>
+    <p class="status" id="status"></p>
+    <p class="ver" id="ver"></p>
+  </main>
+</div>
+<script type="module" src="app.mjs"></script>
+</body>
+</html>
