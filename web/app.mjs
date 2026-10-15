@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "2.6";
+export const APP_VERSION = "2.7";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -479,7 +479,11 @@ function cowCard(c) {
   const top = el("div", "cowtop");
   const left = el("div", "cowleft");
   left.append(el("span", "tag", c.kolczyk));
-  if (c.zasuszona) left.append(el("span", "chip dry", [c.antybiotyk ? `Zasuszona · ${c.antybiotyk}` : "Zasuszona", c.karencja ? `karencja ${c.karencja} dni` : ""].filter(Boolean).join(" · ")));
+  if (c.zasuszona) {
+    const ch = el("span", "chip dry", c.antybiotyk ? `Zasuszona · ${c.antybiotyk}` : "Zasuszona");
+    if (c.karencja) ch.append(" ", el("small", "dni", `(${c.karencja} dni)`));
+    left.append(ch);
+  }
   if (c.karencjaKoniec && !c.karencjaOk) {
     const kn = L.daysBetween(L.todayISO(), c.karencjaKoniec);
     left.append(el("span", "chip " + (kn > 0 ? "no" : "yes"), kn > 0 ? `Karencja: jeszcze ${L.dni(kn)}` : "Można doić"));
@@ -507,11 +511,15 @@ function cowCard(c) {
     ["Następna ruja", L.fmt(L.nextRuja(c, today))],
     ["Zacielenie", L.fmt(c.zacielenie)],
     ["Sprawdzić cielność", L.fmt(L.checkDate(c, cfg))],
-    ["Zasuszenie", c.zasuszona ? [c.zasuszonaData ? L.fmt(c.zasuszonaData) : "zrobione", c.antybiotyk].filter(Boolean).join(" · ") : L.fmt(L.dryDate(c, cfg))],
+    ["Zasuszenie", c.zasuszona ? antNode([c.zasuszonaData ? L.fmt(c.zasuszonaData) : "zrobione", c.antybiotyk].filter(Boolean).join(" · "), c.antybiotyk ? c.karencja : 0) : L.fmt(L.dryDate(c, cfg))],
     ["Na porodówkę", c.przegnana ? "zrobione" : L.fmt(L.moveDate(c, cfg))],
     ["Termin porodu", L.fmt(due)],
   ];
-  for (const [k, val] of items) { const w = el("div"); w.append(el("dt", null, k), el("dd", k === "Termin porodu" && due ? "big" : null, val)); dl.append(w); }
+  for (const [k, val] of items) {
+    const w = el("div"), dd = el("dd", k === "Termin porodu" && due ? "big" : null);
+    if (val instanceof Node) dd.append(val); else dd.textContent = val;
+    w.append(el("dt", null, k), dd); dl.append(w);
+  }
   card.append(top, dl);
   withPhoto(top, c);
   const foot = el("div", "cowfoot");
@@ -713,8 +721,13 @@ function deletePlaceAsk(row, p, n) {
 }
 
 function fillLists() {
-  const ants = [...new Set(cows.map((c) => c.antybiotyk).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pl"));
-  $("antList").replaceChildren(...ants.map((n) => { const o = el("option"); o.value = n; return o; }));
+  antDays.clear();
+  for (const c of cows) {
+    if (c.antybiotyk && c.karencja) antDays.set(c.antybiotyk, Number(c.karencja));
+    if (c.karencjaLek && c.karencjaDni) antDays.set(c.karencjaLek, Number(c.karencjaDni));
+  }
+  const ants = [...new Set([...cows.map((c) => c.antybiotyk), ...antDays.keys()].filter(Boolean))].sort((a, b) => a.localeCompare(b, "pl"));
+  $("antList").replaceChildren(...ants.map((n) => { const o = el("option"); o.value = n; if (antDays.get(n)) o.label = `${n} (${antDays.get(n)} dni)`; return o; }));
   const bulls = [...new Set([...cows, ...calves].flatMap((c) => [c.ojciec, c.byk]).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   $("bykList").replaceChildren(...bulls.map((n) => { const o = el("option"); o.value = n; return o; }));
   $("matkiList").replaceChildren(...cows.map((c) => { const o = el("option"); o.value = c.kolczyk; return o; }));
@@ -1006,13 +1019,28 @@ function inseminate(q) {
 }
 
 // ---------------- wycielenie i karencja ----------------
+const antDays = new Map();   // antybiotyk -> dni karencji (ostatnio wpisane)
+/** Tekst z nazwą antybiotyku i małym dopiskiem „(45 dni)”. */
+function antNode(text, days) {
+  const f = document.createDocumentFragment();
+  f.append(text);
+  if (days) f.append(" ", el("small", "dni", `(${days} dni)`));
+  return f;
+}
+/** Po wpisaniu znanego antybiotyku podstaw jego liczbę dni, jeśli pole jest puste. */
+for (const [antId, karId] of [["dryAnt", "dryKar"], ["antybiotyk", "karencja"]]) {
+  $(antId).addEventListener("input", () => {
+    const d = antDays.get($(antId).value.trim());
+    if (d && !$(karId).value) $(karId).value = d;
+  });
+}
 /** Zmiany przy wycieleniu: nowy cykl + wyliczenie końca karencji z antybiotyku z zasuszenia. */
 function calvingChanges(c, date) {
   const koniec = c.zasuszona ? L.withdrawalEnd(c, date) : "";
   return {
     wycielenie: date, zacielenie: "", byk: "", ruja: "", cielna: "", przegnana: false,
     zasuszona: false, zasuszonaData: "", antybiotyk: "", karencja: 0, karencjaOd: "",
-    karencjaKoniec: koniec, karencjaLek: koniec ? (c.antybiotyk || "") : "", karencjaOk: false,
+    karencjaKoniec: koniec, karencjaLek: koniec ? (c.antybiotyk || "") : "", karencjaDni: koniec ? Number(c.karencja) || 0 : 0, karencjaOk: false,
   };
 }
 function calved(c, date) {

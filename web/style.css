@@ -228,3 +228,4 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:color-mix(in
 .alert.good b{color:var(--accent)}
 .alert.kar{background:color-mix(in srgb,var(--soon-bg) 70%,var(--surface))}
 .alert.kar b{color:var(--soon)}
+small.dni{font-size:.75em;font-weight:500;opacity:.75;white-space:nowrap}

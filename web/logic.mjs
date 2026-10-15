@@ -73,7 +73,7 @@ export function alerts(cows, cfg, ahead, dueAhead, today = todayISO()) {
     const k = c.karencjaKoniec;
     if (k && !c.karencjaOk && !hidden(c, "karencja", k)) {
       const n = daysBetween(today, k);
-      const lek = c.karencjaLek ? `${c.karencjaLek} · ` : "";
+      const lek = c.karencjaLek ? `${c.karencjaLek}${c.karencjaDni ? ` (${c.karencjaDni} dni)` : ""} · ` : "";
       if (n > 0) out.push({ cow: c, kind: "karencja", date: k, n, sort: -1000 + n, title: "Karencja – nie doić do sprzedaży, koniec", sub: `${lek}do ${fmt(k)} (jeszcze ${dni(n)})` });
       else if (n >= -late) out.push({ cow: c, kind: "karencjaOk", date: k, n, sort: -900, title: "Koniec karencji – można doić", sub: `${lek}karencja skończyła się ${fmt(k)}` });
     }
