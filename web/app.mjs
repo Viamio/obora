@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "2.0";
+export const APP_VERSION = "2.1";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -483,7 +483,6 @@ function cowCard(c) {
     else { if (n <= 30) pill.classList.add("soon"); pill.textContent = `Poród za ${L.dni(n)}`; }
   }
   top.append(left, pill);
-  withPhoto(top, c);
   const dl = el("dl");
   const items = [
     ["Po byku", c.ojciec || "—"],
@@ -499,6 +498,7 @@ function cowCard(c) {
   ];
   for (const [k, val] of items) { const w = el("div"); w.append(el("dt", null, k), el("dd", k === "Termin porodu" && due ? "big" : null, val)); dl.append(w); }
   card.append(top, dl);
+  withPhoto(top, c);
   const foot = el("div", "cowfoot");
   foot.append(moveSelect(c, (p) => patch(c, { miejsce: p }, `${c.kolczyk} → ${p || "bez miejsca"}`)));
   const btns = el("div", "cowbtns");
@@ -522,7 +522,6 @@ function calfCard(c) {
   left.append(el("span", "tag", c.kolczyk), el("span", "chip " + (c.plec === "b" ? "" : "yes"), kindLabel(c)));
   const age = el("span", "pill", L.ageText(c.urodzona, today));
   top.append(left, age);
-  withPhoto(top, c);
   const dl = el("dl");
   const bd = L.breedDate(c, cfg);
   let breedTxt = "—";
@@ -536,6 +535,7 @@ function calfCard(c) {
   if (c.plec !== "b") items.push(["Do krycia", breedTxt], ["Miesięcy", c.urodzona ? String(L.monthsOld(c.urodzona, today)) : "—"]);
   for (const [k, val] of items) { const w = el("div"); w.append(el("dt", null, k), el("dd", k === "Do krycia" && bd && L.daysBetween(today, bd) <= 0 ? "big" : null, val)); dl.append(w); }
   card.append(top, dl);
+  withPhoto(top, c);
   const foot = el("div", "cowfoot");
   foot.append(moveSelect(c, (p) => { writeCalf(c.id, { ...rowData(c), miejsce: p }); status(`${c.kolczyk} → ${p || "bez miejsca"}`); }));
   const btns = el("div", "cowbtns");
@@ -551,11 +551,13 @@ function calfCard(c) {
   return card;
 }
 
+/** Zdjęcie zwierzęcia jako delikatne tło całej karty (za danymi). */
 function withPhoto(top, a) {
   const url = photoFor(a);
   if (!url) return;
-  top.classList.add("pic");
-  top.style.backgroundImage = `linear-gradient(to top, rgb(0 0 0 / .35), transparent 55%), url("${url}")`;
+  const card = top.parentElement || top;
+  card.classList.add("pic");
+  card.style.setProperty("--photo", `url("${url}")`);
 }
 
 /** Jałówka przechodzi do stada krów (np. po pierwszym zacieleniu). */
