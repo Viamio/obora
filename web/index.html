@@ -115,6 +115,16 @@
   </form>
 </dialog>
 
+<!-- Wybór: co dodajesz -->
+<dialog class="sheet" id="pickDlg" aria-labelledby="pickTitle">
+  <div class="pick">
+    <div class="sheethead"><h2 id="pickTitle">Co dodajesz?</h2><button type="button" class="ghost x" id="pickCancel" aria-label="Zamknij">✕</button></div>
+    <button type="button" class="pickbtn" id="pickCielak"><b>Cielak</b><span>byk albo jałoszka, wiek</span></button>
+    <button type="button" class="pickbtn" id="pickJalowka"><b>Jałówka</b><span>wiek, powiadomienie o kryciu</span></button>
+    <button type="button" class="pickbtn" id="pickKrowa"><b>Krowa</b><span>wycielenie, ruja, zacielenie, poród</span></button>
+  </div>
+</dialog>
+
 <!-- Formularz młodzieży -->
 <dialog class="sheet" id="calfDlg" aria-labelledby="calfTitle">
   <form id="calfForm" novalidate>
@@ -122,10 +132,10 @@
     <label for="cKolczyk">Numer kolczyka
       <input id="cKolczyk" autocomplete="off" autocapitalize="characters" placeholder="np. PL005123456789">
     </label>
-    <fieldset class="seg">
-      <legend>Płeć</legend>
-      <label><input type="radio" name="plec" value="j" id="cJ" checked> Jałówka</label>
-      <label><input type="radio" name="plec" value="b" id="cB"> Byczek</label>
+    <fieldset class="seg" id="cSeg">
+      <legend>Płeć cielaka</legend>
+      <label><input type="radio" name="plec" value="b" id="cB"> Byk</label>
+      <label><input type="radio" name="plec" value="j" id="cJ" checked> Jałoszka</label>
     </fieldset>
     <div class="row2">
       <label for="cUrodzona">Data urodzenia

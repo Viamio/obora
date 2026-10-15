@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "1.5";
+export const APP_VERSION = "1.6";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -86,7 +86,15 @@ let loaded = false;
 let query = "";
 const NO_PLACE = "__brak";
 const placeOf = (a) => (a.miejsce || "").trim();
-let tab = LS.get("obora_tab") || "glowna";   // glowna | m:<miejsce> | m:__brak | mlodziez | ustawienia
+let tab = LS.get("obora_tab") || "glowna";   // glowna | m:<miejsce> | m:__brak | cielaki | jalowki | ustawienia
+let calfMode = "cielak";
+/** Typ młodego zwierzęcia: "cielak" albo "jalowka" (stare wpisy bez typu: byczek = cielak, jałówka od 6 mies. = jałówka). */
+function typOf(c) {
+  if (c.typ === "cielak" || c.typ === "jalowka") return c.typ;
+  if (c.plec === "b") return "cielak";
+  return (L.monthsOld(c.urodzona) ?? 0) >= 6 ? "jalowka" : "cielak";
+}
+const kindLabel = (c) => (typOf(c) === "jalowka" ? "Jałówka" : c.plec === "b" ? "Cielak · byk" : "Cielak · jałoszka");
 
 /** Lista miejsc: z ustawień, a jeśli pusta – z tego, co już wpisano przy krowach. */
 function places() {
@@ -228,7 +236,8 @@ function tabList() {
   for (const p of places()) t.push({ key: "m:" + p, label: p, n: cows.filter(inPlace(p)).length + calves.filter(inPlace(p)).length });
   const none = cows.filter(inPlace(NO_PLACE)).length + calves.filter(inPlace(NO_PLACE)).length;
   if (none && places().length) t.push({ key: "m:" + NO_PLACE, label: "Bez miejsca", n: none });
-  t.push({ key: "mlodziez", label: "Młodzież", n: calves.length });
+  t.push({ key: "cielaki", label: "Cielaki", n: calves.filter((c) => typOf(c) === "cielak").length });
+  t.push({ key: "jalowki", label: "Jałówki", n: calves.filter((c) => typOf(c) === "jalowka").length });
   t.push({ key: "ustawienia", label: "Ustawienia" });
   return t;
 }
@@ -282,10 +291,10 @@ function render(dir = 0) {
   const v = $("view");
   v.replaceChildren();
   if (tab === "glowna") viewMain(v);
-  else if (tab === "mlodziez") viewCalves(v);
+  else if (tab === "cielaki" || tab === "jalowki") viewCalves(v, tab === "cielaki" ? "cielak" : "jalowka");
   else if (tab === "ustawienia") viewSettings(v);
   else viewPlace(v, tab.slice(2));
-  $("fab").textContent = tab === "mlodziez" ? "+ Dodaj cielę" : "+ Dodaj krowę";
+  $("fab").textContent = tab === "cielaki" ? "+ Dodaj cielaka" : tab === "jalowki" ? "+ Dodaj jałówkę" : "+ Dodaj";
   $("fab").hidden = tab === "ustawienia";
   if (dir) { v.classList.remove("in-l", "in-r"); void v.offsetWidth; v.classList.add(dir > 0 ? "in-r" : "in-l"); }
 }
@@ -309,8 +318,9 @@ function viewMain(v) {
   const h = el("div", "sumtop");
   h.append(el("span", "big", String(all)), el("span", null, `${odm(all, "sztuka", "sztuki", "sztuk")} w gospodarstwie`));
   sum.append(h);
-  const nj = calves.filter((c) => c.plec === "j").length, nb = calves.filter((c) => c.plec === "b").length;
-  const sub = el("p", "hint", `${cows.length} ${odm(cows.length, "krowa", "krowy", "krów")} · młodzież: ${nj} ${odm(nj, "jałówka", "jałówki", "jałówek")}, ${nb} ${odm(nb, "byczek", "byczki", "byczków")}`);
+  const jal = calves.filter((c) => typOf(c) === "jalowka").length;
+  const cb = calves.filter((c) => typOf(c) === "cielak" && c.plec === "b").length, cj = calves.filter((c) => typOf(c) === "cielak" && c.plec !== "b").length;
+  const sub = el("p", "hint", `${cows.length} ${odm(cows.length, "krowa", "krowy", "krów")} · ${jal} ${odm(jal, "jałówka", "jałówki", "jałówek")} · ${cb + cj} ${odm(cb + cj, "cielak", "cielaki", "cielaków")} (${cb} ${odm(cb, "byk", "byki", "byków")}, ${cj} ${odm(cj, "jałoszka", "jałoszki", "jałoszek")})`);
   sum.append(sub);
   const grid = el("div", "placegrid");
   const ps = places();
@@ -337,7 +347,7 @@ function placeTile(label, key) {
   const nc = cows.filter(inPlace(key)).length, nk = calves.filter(inPlace(key)).length;
   const b = el("button", "ptile"); b.type = "button";
   b.append(el("span", "pname", label), el("b", null, String(nc + nk)));
-  b.append(el("small", null, [nc ? `${nc} ${odm(nc, "krowa", "krowy", "krów")}` : "", nk ? `${nk} młodz.` : ""].filter(Boolean).join(" · ") || "pusto"));
+  b.append(el("small", null, [nc ? `${nc} ${odm(nc, "krowa", "krowy", "krów")}` : "", nk ? `${nk} ${odm(nk, "młode", "młode", "młodych")}` : ""].filter(Boolean).join(" · ") || "pusto"));
   b.onclick = () => setTab("m:" + key, 1);
   return b;
 }
@@ -354,7 +364,7 @@ function renderSearch() {
     const l = el("div", "list"); cs.forEach((c) => l.append(cowCard(c))); box.append(l);
   }
   if (ks.length) {
-    box.append(el("h3", "subh", `Młodzież (${ks.length})`));
+    box.append(el("h3", "subh", `Jałówki i cielaki (${ks.length})`));
     const l = el("div", "list"); ks.forEach((c) => l.append(calfCard(c))); box.append(l);
   }
 }
@@ -375,20 +385,28 @@ function viewPlace(v, key) {
   sec.append(list);
   v.append(sec);
   if (ks.length) {
-    const s2 = el("section", "col"); s2.append(el("h2", null, `Młodzież (${ks.length})`));
+    const s2 = el("section", "col"); s2.append(el("h2", null, `Jałówki i cielaki (${ks.length})`));
     const l2 = el("div", "list"); sortCalves(ks).forEach((c) => l2.append(calfCard(c))); s2.append(l2); v.append(s2);
   }
 }
 
-function viewCalves(v) {
+function viewCalves(v, typ) {
+  const ks = calves.filter((c) => typOf(c) === typ);
   const head = el("div", "placehead");
-  head.append(el("h2", null, "Młodzież"), el("span", "count", `${calves.length} szt.`));
+  head.append(el("h2", null, typ === "cielak" ? "Cielaki" : "Jałówki"), el("span", "count", `${ks.length} szt.`));
   v.append(head);
-  v.append(el("p", "hint", `Jałówki są gotowe do krycia po ${cfg.krycie} miesiącach (zmienisz w Ustawieniach). Rano dostaniesz o tym powiadomienie.`));
-  alertsSection(v, [], calves, "Do krycia");
+  if (typ === "cielak") {
+    const nb = ks.filter((c) => c.plec === "b").length;
+    v.append(el("p", "hint", `${nb} ${odm(nb, "byk", "byki", "byków")} · ${ks.length - nb} ${odm(ks.length - nb, "jałoszka", "jałoszki", "jałoszek")}. Gdy jałoszka podrośnie, stuknij przy niej „Do jałówek”.`));
+  } else {
+    v.append(el("p", "hint", `Jałówki są gotowe do krycia po ${cfg.krycie} miesiącach (zmienisz w Ustawieniach). Rano dostaniesz o tym powiadomienie.`));
+  }
+  alertsSection(v, [], ks, typ === "cielak" ? "Do zrobienia" : "Do krycia");
   const list = el("div", "list");
-  if (!calves.length) list.append(el("div", "empty", "Brak cieląt. Dodaj pierwsze przyciskiem „+ Dodaj cielę” na dole: wpisz kolczyk i datę urodzenia albo wiek w miesiącach."));
-  sortCalves(calves).forEach((c) => list.append(calfCard(c)));
+  if (!ks.length) list.append(el("div", "empty", typ === "cielak"
+    ? "Brak cielaków. Dodaj pierwszego przyciskiem „+ Dodaj cielaka” na dole: kolczyk, byk albo jałoszka, data urodzenia albo wiek."
+    : "Brak jałówek. Dodaj przyciskiem „+ Dodaj jałówkę” na dole albo przenieś podrośniętą jałoszkę z zakładki Cielaki."));
+  sortCalves(ks).forEach((c) => list.append(calfCard(c)));
   v.append(list);
 }
 
@@ -497,7 +515,7 @@ function calfCard(c) {
   const card = el("article", "cow calf");
   const top = el("div", "cowtop");
   const left = el("div", "cowleft");
-  left.append(el("span", "tag", c.kolczyk), el("span", "chip " + (c.plec === "b" ? "" : "yes"), c.plec === "b" ? "Byczek" : "Jałówka"));
+  left.append(el("span", "tag", c.kolczyk), el("span", "chip " + (c.plec === "b" ? "" : "yes"), kindLabel(c)));
   const age = el("span", "pill", L.ageText(c.urodzona, today));
   top.append(left, age);
   const dl = el("dl");
@@ -519,7 +537,8 @@ function calfCard(c) {
   if (confirmId === c.id) {
     btns.append(el("span", "note", "Usunąć?"), btn("Nie", "ghost", () => { confirmId = null; render(); }), btn("Tak, usuń", "del", () => { confirmId = null; deleteDoc(doc(calvesCol(farm), c.id)); status("Usunięto."); }));
   } else {
-    if (c.plec !== "b") btns.append(btn("Do stada krów", "ghost", () => toHerd(c, {})));
+    if (typOf(c) === "cielak" && c.plec !== "b") btns.append(btn("Do jałówek", "ghost", () => { writeCalf(c.id, { ...rowData(c), typ: "jalowka", plec: "j" }); status(`${c.kolczyk} przeniesiona do jałówek.`); }));
+    if (typOf(c) === "jalowka") btns.append(btn("Do stada krów", "ghost", () => toHerd(c, {})));
     btns.append(btn("Edytuj", "ghost", () => openCalf(c)), btn("Usuń", "ghost", () => { confirmId = c.id; render(); }));
   }
   foot.append(btns);
@@ -669,7 +688,7 @@ function fillLists() {
 }
 
 // ---------------- formularz krowy ----------------
-function closeDialogs() { for (const id of ["cowDlg", "calfDlg"]) { const d = $(id); if (d.open) d.close(); } }
+function closeDialogs() { for (const id of ["cowDlg", "calfDlg", "pickDlg"]) { const d = $(id); if (d.open) d.close(); } }
 function currentPlace() { return tab.startsWith("m:") && tab !== "m:" + NO_PLACE ? tab.slice(2) : ""; }
 function updatePreview() {
   const z = $("zacielenie").value, r = $("ruja").value;
@@ -723,21 +742,23 @@ $("form").addEventListener("submit", (e) => {
 
 // ---------------- formularz młodzieży ----------------
 function updateCalfPreview() {
-  const born = $("cUrodzona").value, j = $("cJ").checked;
+  const born = $("cUrodzona").value, j = calfMode === "jalowka" || $("cJ").checked;
   $("cKrycieM").textContent = cfg.krycie;
   $("cBreedBox").hidden = !j;
   const d = born && j ? L.addMonths(born, cfg.krycie) : null;
   $("cBreedOut").textContent = d ? L.fmt(d) : "—";
 }
-function openCalf(c) {
+function openCalf(c, mode) {
   closeDialogs();
   calfEditId = c ? c.id : null;
+  calfMode = c ? typOf(c) : mode;
+  $("cSeg").hidden = calfMode !== "cielak";
   $("calfForm").reset(); $("cErr").hidden = true;
   $("cKolczyk").value = c?.kolczyk || ""; $("cUrodzona").value = c?.urodzona || "";
   $("cMatka").value = c?.matka || ""; $("cOjciec").value = c?.ojciec || "";
   (c?.plec === "b" ? $("cB") : $("cJ")).checked = true;
   placeSelect($("cMiejsce"), c ? placeOf(c) : currentPlace());
-  $("calfTitle").textContent = c ? "Edytuj cielę / jałówkę" : "Dodaj cielę / jałówkę";
+  $("calfTitle").textContent = (c ? "Edytuj " : "Dodaj ") + (calfMode === "cielak" ? "cielaka" : "jałówkę");
   updateCalfPreview();
   $("calfDlg").showModal();
   if (!c) $("cKolczyk").focus();
@@ -761,7 +782,7 @@ $("calfForm").addEventListener("submit", (e) => {
   if (urodzona > L.todayISO()) return err("Data urodzenia nie może być z przyszłości.");
   if (calves.some((c) => c.kolczyk === kolczyk && c.id !== calfEditId) || cows.some((c) => c.kolczyk === kolczyk)) return err("Zwierzę z tym kolczykiem już jest.");
   const data = {
-    kolczyk, urodzona, plec: $("cB").checked ? "b" : "j",
+    kolczyk, urodzona, typ: calfMode, plec: calfMode === "cielak" && $("cB").checked ? "b" : "j",
     miejsce: $("cMiejsce").value, matka: $("cMatka").value.trim().toUpperCase().replace(/\s+/g, ""), ojciec: $("cOjciec").value.trim(),
   };
   writeCalf(calfEditId || newId("c"), data);
@@ -769,7 +790,16 @@ $("calfForm").addEventListener("submit", (e) => {
   $("calfDlg").close();
 });
 
-$("fab").onclick = () => (tab === "mlodziez" ? openCalf(null) : openCow(null));
+// wybór: cielak / jałówka / krowa
+$("fab").onclick = () => {
+  if (tab === "cielaki") return openCalf(null, "cielak");
+  if (tab === "jalowki") return openCalf(null, "jalowka");
+  closeDialogs(); $("pickDlg").showModal();
+};
+$("pickCielak").onclick = () => openCalf(null, "cielak");
+$("pickJalowka").onclick = () => openCalf(null, "jalowka");
+$("pickKrowa").onclick = () => openCow(null);
+$("pickCancel").onclick = () => $("pickDlg").close();
 
 // ---------------- start ----------------
 if (farm) start(farm); else { $("setup").hidden = false; $("app").hidden = true; }
