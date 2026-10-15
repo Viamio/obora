@@ -1,0 +1,37 @@
+name: Powiadomienia
+on:
+  schedule:
+    - cron: "7 * * * *"   # co godzinę; skrypt sam sprawdza, czy w Polsce minęła ustawiona godzina
+  workflow_dispatch:
+    inputs:
+      wymus:
+        description: "Wyślij teraz do wszystkich (test)"
+        type: boolean
+        default: false
+permissions:
+  contents: write
+jobs:
+  wyslij:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --omit=dev --no-audit --no-fund
+        working-directory: automat
+      - run: node automat/wyslij.mjs
+        env:
+          FIREBASE_SA: ${{ secrets.FIREBASE_SA }}
+          APP_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+          WYMUS: ${{ inputs.wymus && '1' || '0' }}
+      # GitHub wyłącza automaty w nieaktywnych repozytoriach po 60 dniach – raz w miesiącu robimy pusty zapis
+      - name: Podtrzymanie
+        if: github.event_name == 'schedule'
+        run: |
+          if [ "$(date -u +%d%H)" = "0103" ]; then
+            git config user.name "obora-automat"
+            git config user.email "obora-automat@users.noreply.github.com"
+            git commit --allow-empty -m "Podtrzymanie automatu [skip ci]"
+            git push
+          fi
