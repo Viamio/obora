@@ -1,0 +1,12 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Gospodarstwo widzi tylko ten, kto zna jego kod. Listy wszystkich gospodarstw nie da się pobrać.
+    match /gospodarstwa/{kod} {
+      allow get, create: if kod.size() >= 12;
+      match /{reszta=**} {
+        allow read, write: if kod.size() >= 12;
+      }
+    }
+  }
+}
