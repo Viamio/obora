@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "1.8";
+export const APP_VERSION = "1.9";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -467,6 +467,7 @@ function cowCard(c) {
   const top = el("div", "cowtop");
   const left = el("div", "cowleft");
   left.append(el("span", "tag", c.kolczyk));
+  if (c.zasuszona) left.append(el("span", "chip dry", c.antybiotyk ? `Zasuszona · ${c.antybiotyk}` : "Zasuszona"));
   if (c.zacielenie && (L.pregnant(c) || c.cielna === "nie")) {
     const chip = el("span", "chip", c.cielna === "tak" ? "Cielna ✓" : c.cielna === "nie" ? "Niecielna" : "Do sprawdzenia");
     if (c.cielna === "tak") chip.classList.add("yes"); if (c.cielna === "nie") chip.classList.add("no");

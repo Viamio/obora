@@ -191,3 +191,4 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:color-mix(in
 .abort{display:flex;flex-direction:column;align-items:flex-start;gap:6px;border-top:1px dashed var(--line);padding-top:12px}
 .abort small{color:var(--muted);font-size:.82rem}
 .danger{color:var(--soon);border-color:color-mix(in srgb,var(--soon) 40%,var(--line))}
+.chip.dry{background:color-mix(in srgb,var(--tag) 30%,var(--surface));color:var(--fg);border-color:transparent;max-width:100%;overflow-wrap:anywhere}
