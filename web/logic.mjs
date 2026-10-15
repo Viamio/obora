@@ -3,7 +3,7 @@
 
 export const GESTATION = 280;
 export const CYCLE = 21;
-export const DEFAULT_CFG = { dry: 60, move: 10, check: 35, vwp: 60, ahead: 3, hour: 6 };
+export const DEFAULT_CFG = { dry: 60, move: 10, check: 35, vwp: 60, ahead: 3, hour: 6, krycie: 14, miejsca: [] };
 const DAY = 86400000;
 
 export function todayISO(tz = "Europe/Warsaw") {
@@ -65,6 +65,46 @@ export function alerts(cows, cfg, ahead, dueAhead, today = todayISO()) {
       const n = daysBetween(today, d);
       push(c, "due", d, n < 0 ? "Po terminie wycielenia" : "Wycielenie", `Termin ${fmt(d)}`, dueAhead);
     }
+  }
+  return out.sort((a, b) => a.n - b.n);
+}
+
+// ---------------- młodzież (cielęta, jałówki) ----------------
+/** Dodaje miesiące; 31 stycznia + 1 miesiąc = 28/29 lutego. */
+export function addMonths(s, m) {
+  if (!s) return null;
+  const [y, mo, d] = s.split("-").map(Number);
+  const last = new Date(Date.UTC(y, mo - 1 + m + 1, 0)).getUTCDate();
+  return iso(Date.UTC(y, mo - 1 + m, Math.min(d, last)));
+}
+/** Pełne miesiące życia między datą urodzenia a dniem. */
+export function monthsOld(born, today = todayISO()) {
+  if (!born) return null;
+  const [y1, m1, d1] = born.split("-").map(Number), [y2, m2, d2] = today.split("-").map(Number);
+  let m = (y2 - y1) * 12 + (m2 - m1);
+  if (d2 < d1) m--;
+  return Math.max(0, m);
+}
+export function ageText(born, today = todayISO()) {
+  if (!born) return "—";
+  const days = daysBetween(born, today);
+  if (days < 0) return "—";
+  if (days < 31) return days === 1 ? "1 dzień" : `${days} dni`;
+  const m = monthsOld(born, today);
+  if (m < 24) return `${m} mies.`;
+  const y = Math.floor(m / 12), r = m % 12;
+  return r ? `${y} l. ${r} mies.` : `${y} lat`;
+}
+export const breedDate = (c, cfg) => (c.plec === "j" && c.urodzona ? addMonths(c.urodzona, cfg.krycie) : null);
+
+/** Zadania dla młodzieży: jałówka gotowa do krycia. */
+export function calfAlerts(calves, cfg, ahead, today = todayISO()) {
+  const out = [];
+  for (const c of calves) {
+    const d = breedDate(c, cfg);
+    if (!d) continue;
+    const n = daysBetween(today, d);
+    if (n <= ahead) out.push({ cow: c, calf: true, kind: "krycie", date: d, n, title: "Jałówka gotowa do krycia", sub: `${fmt(d)} (${cfg.krycie} mies. od urodzenia)` });
   }
   return out.sort((a, b) => a.n - b.n);
 }

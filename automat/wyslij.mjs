@@ -1,7 +1,7 @@
 // Codzienne powiadomienia: uruchamiane co godzinę przez GitHub Actions.
 // Dla każdego gospodarstwa, gdy w Polsce minie ustawiona godzina, wysyła listę zadań na wszystkie telefony.
 import admin from "firebase-admin";
-import { alerts, cfgOf, todayISO, kiedy, zadania } from "../web/logic.mjs";
+import { alerts, calfAlerts, cfgOf, todayISO, kiedy, zadania } from "../web/logic.mjs";
 
 const APP_URL = process.env.APP_URL || "";
 const FORCE = process.env.WYMUS === "1";
@@ -24,7 +24,8 @@ for (const ref of farms) {
   const phones = (await ref.collection("telefony").get()).docs.filter((p) => p.data().token);
   if (!FORCE) await ref.set({ ostatnio: today }, { merge: true });
 
-  const list = alerts(cows, cfg, 1, 7, today);
+  const calves = (await ref.collection("mlodziez").get()).docs.map((d) => ({ id: d.id, ...d.data() }));
+  const list = [...alerts(cows, cfg, 1, 7, today), ...calfAlerts(calves, cfg, 1, today)].sort((x, y) => x.n - y.n);
   if (!phones.length || (!list.length && !FORCE)) continue;
 
   const title = list.length ? `Obora: ${list.length} ${zadania(list.length)}` : "Obora: nic do zrobienia";
