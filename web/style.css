@@ -180,3 +180,7 @@ fieldset.seg label{flex-direction:row;align-items:center;gap:8px;border:1.5px so
 fieldset.seg input{width:auto}
 #szukaj{max-width:none;width:100%}
 .subh{font-family:var(--display);font-size:1.1rem;margin:4px 0 0;color:var(--muted)}
+/* zdjęcie w tle (przyklejone do ekranu, rozjaśnione) */
+body::before{content:"";position:fixed;inset:0;z-index:-2;background:url("tlo.jpg") center 35%/cover no-repeat}
+body::after{content:"";position:fixed;inset:0;z-index:-1;background:color-mix(in srgb,var(--bg) 64%,transparent)}
+.tabs{background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
