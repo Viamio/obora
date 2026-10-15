@@ -3,7 +3,7 @@
 
 export const GESTATION = 280;
 export const CYCLE = 21;
-export const DEFAULT_CFG = { dry: 60, move: 10, check: 35, vwp: 60, ahead: 3, hour: 6, krycie: 14, miejsca: [] };
+export const DEFAULT_CFG = { dry: 60, move: 10, check: 35, vwp: 60, ahead: 3, hour: 6, krycie: 14, zalegle: 30, miejsca: [] };
 const DAY = 86400000;
 
 export function todayISO(tz = "Europe/Warsaw") {
@@ -46,13 +46,17 @@ export function insemDate(c, cfg) {
   return addDays(c.wycielenie, cfg.vwp);
 }
 
+/** Zadanie ukryte krzyżykiem – wraca dopiero, gdy zmieni się jego termin (nowy cykl). */
+export const hidden = (c, kind, date) => !!(c.ukryj && c.ukryj[kind] === date);
+
 /** Lista zadań posortowana od najpilniejszych. */
 export function alerts(cows, cfg, ahead, dueAhead, today = todayISO()) {
   const out = [];
+  const late = cfg.zalegle ?? 30;
   const push = (c, kind, date, title, sub, limit = ahead) => {
-    if (!date) return;
+    if (!date || hidden(c, kind, date)) return;
     const n = daysBetween(today, date);
-    if (n <= limit) out.push({ cow: c, kind, date, n, title, sub });
+    if (n <= limit && n >= -late) out.push({ cow: c, kind, date, n, title, sub });
   };
   for (const c of cows) {
     push(c, "insem", insemDate(c, cfg), "Zacielić", `Gotowa od ${fmt(insemDate(c, cfg))} (${cfg.vwp} dni po wycieleniu)`);
@@ -100,11 +104,12 @@ export const breedDate = (c, cfg) => (c.plec === "j" && c.urodzona ? addMonths(c
 /** Zadania dla młodzieży: jałówka gotowa do krycia. */
 export function calfAlerts(calves, cfg, ahead, today = todayISO()) {
   const out = [];
+  const late = cfg.zalegle ?? 30;
   for (const c of calves) {
     const d = breedDate(c, cfg);
-    if (!d) continue;
+    if (!d || hidden(c, "krycie", d)) continue;
     const n = daysBetween(today, d);
-    if (n <= ahead) out.push({ cow: c, calf: true, kind: "krycie", date: d, n, title: "Jałówka gotowa do krycia", sub: `${fmt(d)} (${cfg.krycie} mies. od urodzenia)` });
+    if (n <= ahead && n >= -late) out.push({ cow: c, calf: true, kind: "krycie", date: d, n, title: "Jałówka gotowa do krycia", sub: `${fmt(d)} (${cfg.krycie} mies. od urodzenia)` });
   }
   return out.sort((a, b) => a.n - b.n);
 }

@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "2.3";
+export const APP_VERSION = "2.4";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -433,7 +433,10 @@ function alertsSection(v, cs, ks, title = "Do zrobienia") {
     const t = el("div", "atxt");
     t.append(el("b", null, `${a.title} ${L.kiedy(a.n)}`), el("small", null, a.sub + (placeOf(c) && !tab.startsWith("m:") ? ` · ${placeOf(c)}` : "")));
     const ab = el("div", "abtns");
-    row.append(el("span", "tag", c.kolczyk), t, ab);
+    const x = btn("✕", "ghost xclose", () => hideAlert(a));
+    x.setAttribute("aria-label", "Ukryj to zadanie"); x.title = "Ukryj to zadanie";
+    const head = el("div", "ahead"); head.append(el("span", "tag", c.kolczyk), x);
+    row.append(head, t, ab);
     const zacielona = () => { openCow(c, { zacielenie: today, ruja: today }); status("Wpisz, jakim bykiem zacielona, i naciśnij Zapisz."); setTimeout(() => $("byk").focus(), 50); };
     if (a.kind === "check") ab.append(btn("Cielna", "okbtn", () => patch(c, { cielna: "tak" }, `${c.kolczyk}: cielna`)), btn("Niecielna", "nobtn", () => patch(c, { cielna: "nie" }, `${c.kolczyk}: niecielna`)));
     if (a.kind === "dry") ab.append(btn("Zasuszona", "okbtn", () => openDry(c)));
@@ -631,6 +634,7 @@ function viewSettings(v) {
     ["setVwp", "vwp", "Zacielić: dni po wycieleniu", 1, 200, "dni"],
     ["setKrycie", "krycie", "Jałówka gotowa do krycia po", 6, 36, "mies."],
     ["setAhead", "ahead", "Pokazuj zadania z wyprzedzeniem", 0, 30, "dni"],
+    ["setZalegle", "zalegle", "Ukrywaj zadania spóźnione o więcej niż", 1, 365, "dni"],
     ["setHour", "hour", "Godzina porannego powiadomienia", 0, 23, ":00"],
   ];
   let timer = null;
@@ -844,6 +848,14 @@ function savePhoto(p, id, old) {
   photoCache.set(id, { v, url: ph });
   setDoc(photoRef(farm, id), { data: ph, zmieniono: v }).catch(() => status("Nie udało się zapisać zdjęcia."));
   return v;
+}
+
+/** Krzyżyk przy zadaniu: ukrywa je dla tej sztuki (do zmiany terminu). */
+function hideAlert(a) {
+  const c = a.cow;
+  const ukryj = { ...(c.ukryj || {}), [a.kind]: a.date };
+  if (a.calf) writeCalf(c.id, { ...rowData(c), ukryj }); else patch(c, { ukryj });
+  status(`${c.kolczyk}: ukryto „${a.title}”.`);
 }
 
 // ---------------- do zacielenia ----------------

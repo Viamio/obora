@@ -221,3 +221,6 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:color-mix(in
 .qnum.on{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);opacity:1}
 .qmanual{display:flex;flex-direction:column;gap:10px;border-top:1px dashed var(--line);padding-top:12px}
 @media (max-width:360px){.qrowp{grid-template-columns:1fr}}
+.ahead{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.xclose{min-height:36px;min-width:36px;padding:4px 10px;font-size:1rem;color:var(--muted);border-color:transparent;background:transparent}
+.xclose:hover{border-color:var(--line)}
