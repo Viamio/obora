@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "2.2";
+export const APP_VERSION = "2.3";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -854,39 +854,53 @@ function viewQueue(v) {
   head.append(el("h2", null, "Do zacielenia"), el("span", "count", `${queue.length} szt.`));
   v.append(head);
 
-  // --- dodawanie ---
+  // --- dodawanie: tablica miejsc z numerami ---
   const add = el("form", "card qadd"); add.noValidate = true;
-  add.append(el("h3", "subh", "Dodaj do listy"));
-  const selLab = el("label"); selLab.htmlFor = "qPick"; selLab.append(document.createTextNode("Wybierz z wpisanych"));
-  const sel = el("select"); sel.id = "qPick";
-  const o0 = el("option", null, "— wybierz krowę lub jałówkę —"); o0.value = ""; sel.append(o0);
+  add.append(el("h3", "subh", "Stuknij numer, żeby dodać do listy"));
   const inQ = new Set(queue.map((q) => q.kolczyk));
-  const grp = (label, list) => {
-    if (!list.length) return;
-    const g = el("optgroup"); g.label = label;
+  const pickable = [...cows, ...calves.filter((c) => typOf(c) === "jalowka")];
+  const board = el("div", "qboard");
+  const rows = [...places().map((p) => [p, p]), ["Bez miejsca", NO_PLACE]];
+  for (const [label, key] of rows) {
+    const list = pickable.filter(inPlace(key)).sort((a, b) => a.kolczyk.localeCompare(b.kolczyk, "pl", { numeric: true }));
+    if (!list.length) continue;
+    const row = el("div", "qrowp");
+    const name = el("div", "qplace"); name.append(el("b", null, label), el("small", null, `${list.length} szt.`));
+    const nums = el("div", "qnums");
     for (const a of list) {
-      const o = el("option", null, `${a.kolczyk}${placeOf(a) ? " · " + placeOf(a) : ""}${inQ.has(a.kolczyk) ? " (już na liście)" : ""}${L.pregnant(a) ? " (cielna)" : ""}`);
-      o.value = a.kolczyk; o.disabled = inQ.has(a.kolczyk); g.append(o);
+      const on = inQ.has(a.kolczyk), preg = L.pregnant(a), jal = !cows.includes(a);
+      const b = el("button", "qnum" + (on ? " on" : "") + (preg ? " preg" : "") + (jal ? " jal" : ""));
+      b.type = "button";
+      b.append(el("span", null, a.kolczyk));
+      if (on) b.append(el("small", null, "na liście ✓"));
+      else if (preg) b.append(el("small", null, "cielna"));
+      else if (jal) b.append(el("small", null, "jałówka"));
+      b.setAttribute("aria-pressed", on);
+      b.onclick = () => {
+        if (on) { const q = queue.find((x) => x.kolczyk === a.kolczyk); if (q) deleteDoc(doc(queueCol(farm), q.id)); status(`${a.kolczyk} usunięta z listy.`); }
+        else { setDoc(doc(queueCol(farm), newId("z")), { kolczyk: a.kolczyk, miejsce: placeOf(a), dodano: today, zmieniono: Date.now() }); status(`${a.kolczyk} dodana do listy.`); }
+      };
+      nums.append(b);
     }
-    sel.append(g);
-  };
-  grp("Krowy", [...cows].sort((a, b) => a.kolczyk.localeCompare(b.kolczyk)));
-  grp("Jałówki", calves.filter((c) => typOf(c) === "jalowka").sort((a, b) => a.kolczyk.localeCompare(b.kolczyk)));
-  selLab.append(sel);
-  const or = el("p", "hint", "albo wpisz ręcznie:");
+    row.append(name, nums);
+    board.append(row);
+  }
+  if (!board.children.length) board.append(el("div", "empty", "Nie masz jeszcze wpisanych krów ani jałówek. Wpisz kolczyk ręcznie poniżej."));
+  add.append(board);
+  const or = el("h3", "subh", "Albo wpisz kolczyk ręcznie");
   const kLab = el("label"); kLab.htmlFor = "qKolczyk"; kLab.append(document.createTextNode("Numer kolczyka"));
   const kIn = el("input"); kIn.id = "qKolczyk"; kIn.autocomplete = "off"; kIn.placeholder = "np. PL005123456789"; kIn.setAttribute("autocapitalize", "characters"); kLab.append(kIn);
   const pLab = el("label"); pLab.htmlFor = "qMiejsce"; pLab.append(document.createTextNode("Miejsce"));
   const pSel = el("select"); pSel.id = "qMiejsce"; placeSelect(pSel, ""); pLab.append(pSel);
-  sel.onchange = () => { const a = findAnimal(sel.value); kIn.value = ""; pSel.value = a ? placeOf(a) : ""; };
-  kIn.oninput = () => { if (kIn.value) sel.value = ""; const a = findAnimal(kIn.value.trim().toUpperCase().replace(/\s+/g, "")); if (a) pSel.value = placeOf(a); };
+  kIn.oninput = () => { const a = findAnimal(kIn.value.trim().toUpperCase().replace(/\s+/g, "")); if (a) pSel.value = placeOf(a); };
   const err = el("p", "err"); err.hidden = true;
   const sub = el("button", "primary", "Dodaj do listy"); sub.type = "submit";
-  add.append(selLab, or, kLab, pLab, err, sub);
+  const manual = el("div", "qmanual"); manual.append(or, kLab, pLab, err, sub);
+  add.append(manual);
   add.onsubmit = (e) => {
     e.preventDefault();
-    const k = (sel.value || kIn.value).trim().toUpperCase().replace(/\s+/g, "");
-    if (!k) { err.textContent = "Wybierz krowę z listy albo wpisz kolczyk."; err.hidden = false; return; }
+    const k = kIn.value.trim().toUpperCase().replace(/\s+/g, "");
+    if (!k) { err.textContent = "Wpisz numer kolczyka."; err.hidden = false; return; }
     if (queue.some((q) => q.kolczyk === k)) { err.textContent = "Ta sztuka już jest na liście."; err.hidden = false; return; }
     const a = findAnimal(k);
     const miejsce = pSel.value || (a ? placeOf(a) : "");

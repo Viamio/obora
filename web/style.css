@@ -205,3 +205,19 @@ body::after{content:"";position:fixed;inset:0;z-index:-1;background:color-mix(in
 .qadd{gap:10px}
 .qadd .subh{margin:0}
 .qrow .cowtop{min-height:0}
+/* tablica wyboru do zacielenia */
+.qboard{display:flex;flex-direction:column;gap:0}
+.qrowp{display:grid;grid-template-columns:minmax(92px,30%) 1fr;gap:10px;align-items:start;padding:10px 0;border-top:1px solid var(--line)}
+.qrowp:first-child{border-top:0;padding-top:2px}
+.qplace{display:flex;flex-direction:column;gap:2px;padding-top:6px;min-width:0}
+.qplace b{font-family:var(--display);font-size:1.15rem;line-height:1.1;overflow-wrap:break-word;hyphens:auto}
+.qplace small{color:var(--muted);font-size:.78rem}
+.qnums{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
+.qnum{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:0;min-height:48px;min-width:72px;padding:6px 10px;
+  background:var(--tag);color:var(--tag-fg);border:2px solid transparent;border-radius:8px 14px 14px 8px;font-family:var(--display);font-weight:700;font-size:1.05rem;line-height:1.1;font-variant-numeric:tabular-nums}
+.qnum small{font-family:var(--body);font-size:.68rem;font-weight:600;opacity:.8}
+.qnum.jal{background:var(--surface);color:var(--fg);border-color:var(--tag)}
+.qnum.preg{opacity:.55}
+.qnum.on{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);opacity:1}
+.qmanual{display:flex;flex-direction:column;gap:10px;border-top:1px dashed var(--line);padding-top:12px}
+@media (max-width:360px){.qrowp{grid-template-columns:1fr}}
