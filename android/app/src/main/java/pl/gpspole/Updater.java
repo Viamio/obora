@@ -1,6 +1,8 @@
 package pl.gpspole;
 
 import android.app.Activity;
+import android.app.PendingIntent;
+import android.content.pm.PackageInstaller;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
@@ -15,7 +17,9 @@ import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.OutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -102,6 +106,53 @@ public class Updater {
         }).start();
     }
 
+    static final String INSTALL_STATUS = "pl.gpspole.INSTALL_STATUS";
+
+    /** Installs through PackageInstaller. On Android 12+ the app becomes the installer of record,
+     *  so later updates go through without a confirmation screen. */
+    private void sessionInstall(File apk) throws Exception {
+        PackageInstaller pi = activity.getPackageManager().getPackageInstaller();
+        PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+        params.setAppPackageName(activity.getPackageName());
+        if (Build.VERSION.SDK_INT >= 31) params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED);
+        int id = pi.createSession(params);
+        PackageInstaller.Session session = pi.openSession(id);
+        try {
+            OutputStream os = session.openWrite("base.apk", 0, apk.length());
+            InputStream is = new FileInputStream(apk);
+            byte[] buf = new byte[65536];
+            int n;
+            while ((n = is.read(buf)) > 0) os.write(buf, 0, n);
+            session.fsync(os);
+            is.close();
+            os.close();
+            Intent i = new Intent(activity, MainActivity.class).setAction(INSTALL_STATUS)
+                    .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 31 ? PendingIntent.FLAG_MUTABLE : 0);
+            PendingIntent pend = PendingIntent.getActivity(activity, id, i, flags);
+            session.commit(pend.getIntentSender());
+            js("window.onUpdateInstalling&&onUpdateInstalling()");
+        } catch (Exception e) {
+            session.abandon();
+            throw e;
+        } finally {
+            session.close();
+        }
+    }
+
+    void onInstallStatus(Intent intent) {
+        int st = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, -999);
+        if (st == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+            Intent confirm = intent.getParcelableExtra(Intent.EXTRA_INTENT);
+            if (confirm != null) {
+                confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                activity.startActivity(confirm);
+            }
+        } else if (st != PackageInstaller.STATUS_SUCCESS && st != -999) {
+            js("window.onUpdateError&&onUpdateError(" + q("Instalacja przerwana. Dotknij „Aktualizuj”, aby spróbować ponownie.") + ")");
+        }
+    }
+
     @JavascriptInterface
     public void install() {
         if (busy) return;
@@ -152,12 +203,17 @@ public class Updater {
                 }
                 fo.close();
                 in.close();
-                Uri uri = FileProvider.getUriForFile(activity, "pl.gpspole.files", out);
-                Intent i = new Intent(Intent.ACTION_VIEW);
-                i.setDataAndType(uri, "application/vnd.android.package-archive");
-                i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
                 js("window.saveNow&&saveNow();window.onUpdateProgress&&onUpdateProgress(100)");
-                activity.runOnUiThread(() -> activity.startActivity(i));
+                try {
+                    sessionInstall(out);
+                } catch (Exception se) {
+                    // fallback: classic installer screen
+                    Uri uri = FileProvider.getUriForFile(activity, "pl.gpspole.files", out);
+                    Intent i = new Intent(Intent.ACTION_VIEW);
+                    i.setDataAndType(uri, "application/vnd.android.package-archive");
+                    i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                    activity.runOnUiThread(() -> activity.startActivity(i));
+                }
             } catch (Exception e) {
                 js("window.onUpdateError&&onUpdateError(" + q("Pobieranie nie powiodło się. Spróbuj ponownie.") + ")");
             } finally {

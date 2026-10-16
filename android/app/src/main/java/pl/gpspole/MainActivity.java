@@ -29,6 +29,7 @@ public class MainActivity extends Activity {
     private static final long GPS_INTERVAL_MS = 33L;
 
     private WebView web;
+    private Updater updater;
     private GeolocationPermissions.Callback pendingCallback;
     private String pendingOrigin;
     private LocationManager locationManager;
@@ -137,7 +138,8 @@ public class MainActivity extends Activity {
         s.setDomStorageEnabled(true);
         s.setGeolocationEnabled(true);
         s.setAllowFileAccess(false);
-        web.addJavascriptInterface(new Updater(this, web), "AppUpdate");
+        updater = new Updater(this, web);
+        web.addJavascriptInterface(updater, "AppUpdate");
 
         web.setWebViewClient(new WebViewClient() {
             @Override
@@ -186,6 +188,12 @@ public class MainActivity extends Activity {
     protected void onPause() {
         stopGps();
         super.onPause();
+    }
+
+    @Override
+    protected void onNewIntent(android.content.Intent intent) {
+        super.onNewIntent(intent);
+        if (updater != null && Updater.INSTALL_STATUS.equals(intent.getAction())) updater.onInstallStatus(intent);
     }
 
     @Override

@@ -108,6 +108,10 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .upd .row .btn.go{background:var(--amber);border-color:var(--amber);color:#1b1404}
 .bar{height:8px;border-radius:4px;background:var(--bg);overflow:hidden}
 .bar i{display:block;height:100%;width:0;background:var(--amber);transition:width .2s}
+.updBanner{pointer-events:auto;display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;min-height:52px;padding:8px 8px 8px 14px;border-radius:12px;border:1px solid var(--amber);background:#2b2216;color:var(--fg);text-align:left;font-size:15px;font-weight:500}
+.updBanner b{flex:none;background:var(--amber);color:#1b1404;font-family:var(--display);font-size:18px;letter-spacing:.06em;text-transform:uppercase;padding:9px 14px;border-radius:9px}
+.updBanner span{min-width:0}
+.updBanner.busy b{background:#5a4520;color:var(--fg)}
 .toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 120px);transform:translateX(-50%);background:#000d;border:1px solid var(--line);padding:10px 16px;border-radius:14px;font-size:14px;max-width:90%;text-align:center;z-index:20}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -126,6 +130,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
     <div class="stat" id="sOverBox"><b id="sOver">0,00</b><span>ha nakładki</span></div>
     <div class="stat" id="sAccBox"><b id="sAcc">—</b><span id="sAccLbl">GPS ± m</span></div>
   </div>
+  <button class="updBanner" id="updBanner" hidden><span id="updBannerText">Nowa wersja aplikacji</span><b id="updBannerBtn">Aktualizuj</b></button>
 </div>
 
 <div class="side">
@@ -593,20 +598,30 @@ $('goDemo').addEventListener('click',()=>{begin();startDemo();toast('Steruj strz
 addEventListener('resize',resize);resize();requestAnimationFrame(frame);
 if('serviceWorker' in navigator&&window.isSecureContext&&!window.AppUpdate){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 
-/* in-app update (only inside the Android app) */
-const AU=window.AppUpdate;let updState='idle';
+/* in-app update: one tap downloads and installs (only inside the Android app) */
+const AU=window.AppUpdate;let updState='idle',wantInstall=false,latestVer=0;
 function updSet(text,btn,state){$('updText').textContent=text;$('updBtn').textContent=btn;updState=state;$('updBtn').classList.toggle('go',state==='ready')}
+function banner(text,btn,busy){const b=$('updBanner');b.hidden=false;$('updBannerText').textContent=text;$('updBannerBtn').textContent=btn;b.classList.toggle('busy',!!busy)}
+function startInstall(){if(!AU||updState==='dl')return;save();saveTools();wantInstall=false;
+  updSet('Pobieranie… 0%','Czekaj','dl');$('updFill').style.width='0';$('updBar').hidden=false;banner('Pobieranie wersji 1.'+latestVer+'… 0%','Czekaj',true);AU.install()}
 window.saveNow=()=>{save();saveTools()};
-if(AU){$('updBox').hidden=false;updSet('Zainstalowana wersja '+AU.versionName(),'Sprawdź','idle');setTimeout(()=>{try{AU.check(true)}catch(e){}},4000)}
+if(AU){$('updBox').hidden=false;updSet('Zainstalowana wersja '+AU.versionName(),'Aktualizuj','idle');
+  const quiet=()=>{try{if(updState==='idle')AU.check(true)}catch(e){}};setTimeout(quiet,3000);setInterval(quiet,30*60*1000)}
 $('updBtn').addEventListener('click',()=>{if(!AU)return;
-  if(updState==='ready'){save();saveTools();updSet('Pobieranie… 0%','Czekaj','dl');$('updFill').style.width='0';$('updBar').hidden=false;AU.install()}
-  else if(updState==='idle'){updSet('Sprawdzam…','Czekaj','checking');AU.check(false)}});
+  if(updState==='ready')startInstall();
+  else if(updState==='idle'){wantInstall=true;updSet('Sprawdzam…','Czekaj','checking');AU.check(false)}});
+$('updBanner').addEventListener('click',()=>{if(updState==='ready')startInstall()});
 window.onUpdateInfo=(avail,cur,latest,quiet)=>{
-  if(avail){updSet('Dostępna wersja 1.'+latest+' (masz 1.'+cur+'). Pole i sprzęt zostaną zachowane.','Zainstaluj','ready');$('menu').classList.add('badge');if(quiet)toast('Jest nowa wersja aplikacji. Zainstalujesz ją w ustawieniach (☰).')}
-  else updSet('Masz najnowszą wersję (1.'+cur+')','Sprawdź','idle')};
+  if(avail){latestVer=latest;updSet('Dostępna wersja 1.'+latest+' (masz 1.'+cur+'). Pole i sprzęt zostaną zachowane.','Aktualizuj','ready');
+    banner('Nowa wersja 1.'+latest+' jest gotowa','Aktualizuj');if(wantInstall)startInstall()}
+  else{wantInstall=false;updSet('Masz najnowszą wersję (1.'+cur+')','Aktualizuj','idle');if(!quiet)toast('Masz najnowszą wersję.')}};
 window.onUpdateProgress=p=>{$('updFill').style.width=p+'%';
-  if(p>=100){updSet('Otwieram instalator. Potwierdź „Aktualizuj”.','Zainstaluj','ready');$('updBar').hidden=true}else $('updText').textContent='Pobieranie… '+p+'%'};
-window.onUpdateError=m=>{$('updBar').hidden=true;const r=updState==='dl'||updState==='ready';updSet(m,r?'Zainstaluj':'Sprawdź',r?'ready':'idle')};
+  if(p<100){$('updText').textContent='Pobieranie… '+p+'%';banner('Pobieranie wersji 1.'+latestVer+'… '+p+'%','Czekaj',true)}
+  else{$('updText').textContent='Instaluję…';banner('Instaluję wersję 1.'+latestVer+'…','Czekaj',true)}};
+window.onUpdateInstalling=()=>{$('updBar').hidden=true;$('updText').textContent='Instaluję. Aplikacja za chwilę się zamknie i będzie gotowa w nowej wersji.';
+  banner('Instaluję. Po chwili otwórz aplikację ponownie.','…',true);setTimeout(()=>{if(updState==='dl')updSet('Jeśli nic się nie stało, dotknij jeszcze raz.','Aktualizuj','ready')},25000)};
+window.onUpdateError=m=>{$('updBar').hidden=true;const r=updState==='dl'||updState==='ready'||latestVer>0;wantInstall=false;
+  updSet(m,'Aktualizuj',r?'ready':'idle');if(r)banner(m,'Ponów');else toast(m)};
 })();
 </script>
 </body>
