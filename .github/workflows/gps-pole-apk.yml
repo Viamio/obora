@@ -19,12 +19,12 @@ jobs:
           gradle-version: '8.9'
       - name: Build APK
         working-directory: android
-        run: gradle assembleDebug --no-daemon --stacktrace
-      - run: cp android/app/build/outputs/apk/debug/app-debug.apk GPS-Pole.apk
+        run: gradle assembleRelease --no-daemon --stacktrace -PbuildNumber=${{ github.run_number }}
+      - run: cp android/app/build/outputs/apk/release/app-release.apk GPS-Pole.apk
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: gps-pole-${{ github.run_number }}
-          name: GPS Pole ${{ github.run_number }}
+          name: GPS Pole 1.${{ github.run_number }}
           target_commitish: ${{ github.sha }}
           make_latest: false
           body: Aplikacja GPS Pole na Androida. Pobierz plik GPS-Pole.apk na telefonie i zainstaluj.

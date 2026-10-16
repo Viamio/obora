@@ -137,6 +137,7 @@ public class MainActivity extends Activity {
         s.setDomStorageEnabled(true);
         s.setGeolocationEnabled(true);
         s.setAllowFileAccess(false);
+        web.addJavascriptInterface(new Updater(this, web), "AppUpdate");
 
         web.setWebViewClient(new WebViewClient() {
             @Override

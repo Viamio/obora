@@ -73,6 +73,14 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 .note{font-size:13px;color:var(--muted);line-height:1.5;margin:0}
 .start .btn{width:100%}
 .start .primary{background:var(--amber);border-color:var(--amber);color:#1b1404}
+.upd{display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:12px;padding:12px}
+.upd .row b{font-family:var(--display);font-size:20px;letter-spacing:.02em}
+.upd .row .btn{min-height:48px;padding:6px 14px;font-size:17px;letter-spacing:.01em;flex:none;white-space:nowrap}
+.upd .row .btn.go{background:var(--amber);border-color:var(--amber);color:#1b1404}
+.bar{height:8px;border-radius:4px;background:var(--bg);overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--amber);transition:width .2s}
+.icon{position:relative}
+.icon.badge::after{content:"";position:absolute;top:7px;right:7px;width:11px;height:11px;border-radius:50%;background:var(--overlap);box-shadow:0 0 0 2px var(--panel)}
 .toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 96px);transform:translateX(-50%);background:#000c;border:1px solid var(--line);padding:10px 16px;border-radius:999px;font-size:14px;max-width:90%;text-align:center}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -127,6 +135,10 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
       <div class="width"><button data-d="-0.5" data-t="w1">−</button><input id="w1" type="number" inputmode="decimal" step="0.5" min="1" max="60" value="10"><button data-d="0.5" data-t="w1">+</button></div></div>
     <div><div class="note" style="margin-bottom:6px">Obrót mapy</div>
       <div class="seg"><button id="oHead" class="sel">Kierunek jazdy w górę</button><button id="oNorth">Północ w górę</button></div></div>
+    <div class="upd" id="updBox" hidden>
+      <div class="row"><div style="min-width:0"><b>Aktualizacja</b><div class="note" id="updText">—</div></div><button class="btn" id="updBtn">Sprawdź</button></div>
+      <div class="bar" id="updBar" hidden><i id="updFill"></i></div>
+    </div>
     <button class="btn wide" id="clearAB">Usuń linię AB</button>
     <button class="btn wide danger" id="newField">Nowe pole<small>kasuje opryskany obszar</small></button>
     <p class="note" id="perf" style="color:var(--fg)">Ekran: — kl./s</p>
@@ -397,6 +409,21 @@ function begin(){S.W=Math.max(1,+$('w0').value||10);widthUi();$('start').hidden=
 $('goGps').addEventListener('click',()=>{begin();startGps()});
 $('goDemo').addEventListener('click',()=>{begin();S.zoom=3;startDemo();toast('Demo: belka włącza się sama na prostych, nawroty bez oprysku.')});
 addEventListener('resize',resize);resize();requestAnimationFrame(frame);
+
+/* in-app update (only inside the Android app) */
+const AU=window.AppUpdate;let updState='idle';
+function updSet(text,btn,state){$('updText').textContent=text;$('updBtn').textContent=btn;updState=state;$('updBtn').classList.toggle('go',state==='ready')}
+window.saveNow=save;
+if(AU){$('updBox').hidden=false;updSet('Zainstalowana wersja '+AU.versionName(),'Sprawdź','idle');setTimeout(()=>{try{AU.check(true)}catch(e){}},4000)}
+$('updBtn').addEventListener('click',()=>{if(!AU)return;
+  if(updState==='ready'){save();updSet('Pobieranie… 0%','Czekaj','dl');$('updFill').style.width='0';$('updBar').hidden=false;AU.install()}
+  else if(updState==='idle'){updSet('Sprawdzam…','Czekaj','checking');AU.check(false)}});
+window.onUpdateInfo=(avail,cur,latest,quiet)=>{
+  if(avail){updSet('Dostępna wersja 1.'+latest+' (masz 1.'+cur+'). Pole zostanie zachowane.','Zainstaluj','ready');$('menu').classList.add('badge');if(quiet)toast('Jest nowa wersja aplikacji. Zainstalujesz ją w ustawieniach (☰).')}
+  else updSet('Masz najnowszą wersję (1.'+cur+')','Sprawdź','idle')};
+window.onUpdateProgress=p=>{$('updFill').style.width=p+'%';
+  if(p>=100){updSet('Otwieram instalator. Potwierdź „Aktualizuj”.','Zainstaluj','ready');$('updBar').hidden=true}else $('updText').textContent='Pobieranie… '+p+'%'};
+window.onUpdateError=m=>{$('updBar').hidden=true;updSet(m,updState==='dl'||updState==='ready'?'Zainstaluj':'Sprawdź',updState==='dl'||updState==='ready'?'ready':'idle')};
 if('serviceWorker' in navigator&&window.isSecureContext){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 })();
 </script>
