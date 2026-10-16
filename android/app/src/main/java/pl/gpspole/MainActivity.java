@@ -130,7 +130,6 @@ public class MainActivity extends Activity {
 
         web = new WebView(this);
         web.setBackgroundColor(0xFF0E130F);
-        web.setLayerType(WebView.LAYER_TYPE_HARDWARE, null);
         setContentView(web);
 
         WebSettings s = web.getSettings();

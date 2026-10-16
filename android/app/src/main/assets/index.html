@@ -304,7 +304,7 @@ function tileAt(tx,ty){const k=(tx+30000)*65536+(ty+30000);let t=tiles.get(k);
   if(!t){const c=document.createElement('canvas');c.width=c.height=TS;const g=c.getContext('2d');g.setTransform(TPX,0,0,-TPX,-tx*TS,(ty+1)*TS);t={c,g,tx,ty};tiles.set(k,t)}return t}
 function paintPoly(q,color){const xs=q.map(v=>v.x),ys=q.map(v=>v.y);
   for(let tx=Math.floor(Math.min(...xs)/TM);tx<=Math.floor(Math.max(...xs)/TM);tx++)for(let ty=Math.floor(Math.min(...ys)/TM);ty<=Math.floor(Math.max(...ys)/TM);ty++){
-    const g=tileAt(tx,ty).g;g.beginPath();g.moveTo(q[0].x,q[0].y);for(let i=1;i<q.length;i++)g.lineTo(q[i].x,q[i].y);g.closePath();g.fillStyle=color;g.fill()}}
+    const tl=tileAt(tx,ty),g=tl.g;tl.dirty=true;g.beginPath();g.moveTo(q[0].x,q[0].y);for(let i=1;i<q.length;i++)g.lineTo(q[i].x,q[i].y);g.closePath();g.fillStyle=color;g.fill()}}
 function rasterize(p1,p2){
   if(Math.hypot(p2.x-p1.x,p2.y-p1.y)>15)return;
   const [L1,R1]=edges(p1),[L2,R2]=edges(p2),q=[L1,L2,R2,R1];
@@ -319,7 +319,11 @@ function rasterize(p1,p2){
     else if(t-old>20&&!over.has(k)){over.add(k);paintPoly([{x:ix,y:iy},{x:ix+1,y:iy},{x:ix+1,y:iy+1},{x:ix,y:iy+1}],'#ff6a3d')}
   }
 }
-function rebuild(){cells=new Map();over=new Set();tiles=new Map();for(let i=1;i<S.pts.length;i++)if(S.pts[i].on)rasterize(S.pts[i-1],S.pts[i])}
+const hasIB=typeof createImageBitmap==='function';
+function refreshBitmaps(){if(!hasIB)return;tiles.forEach(t=>{if(!t.dirty||t.busy)return;t.dirty=false;t.busy=true;
+  createImageBitmap(t.c).then(bm=>{t.busy=false;if(t.bm)t.bm.close();t.bm=bm}).catch(()=>{t.busy=false})})}
+setInterval(refreshBitmaps,300);
+function rebuild(){tiles.forEach(t=>{if(t.bm)t.bm.close()});cells=new Map();over=new Set();tiles=new Map();for(let i=1;i<S.pts.length;i++)if(S.pts[i].on)rasterize(S.pts[i-1],S.pts[i])}
 
 /* ---------- position input ---------- */
 const D={x:0,y:0,h:Math.PI/2,ok:false},F={x:0,y:0,vx:0,vy:0,at:0};let fixTimes=[];
@@ -413,7 +417,8 @@ function guidance(){
 
 /* ---------- render ---------- */
 let dpr=1,Wpx=0,Hpx=0;
-function resize(){dpr=Math.min(window.devicePixelRatio||1,2.5);Wpx=innerWidth;Hpx=innerHeight;canvas.width=Wpx*dpr;canvas.height=Hpx*dpr}
+let quality=1,slowSecs=0;
+function resize(){dpr=Math.max(1,Math.min(window.devicePixelRatio||1,2.5)*quality);Wpx=innerWidth;Hpx=innerHeight;canvas.width=Wpx*dpr;canvas.height=Hpx*dpr}
 function rot(){return S.headUp?D.h-Math.PI/2:0}
 function anchor(){return{x:Wpx/2,y:S.follow&&S.headUp?Hpx*0.5:Hpx*0.48}}
 function angDiff(a,b){let d=b-a;while(d>Math.PI)d-=2*Math.PI;while(d<-Math.PI)d+=2*Math.PI;return d}
@@ -424,12 +429,12 @@ const BG={sat:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imager
 let bgMode=lsGet('gpsPole.bg')||'none';if(!BG[bgMode])bgMode='none';
 const tcache=new Map();let inflight=0,frameNo=0;
 function getTile(z,x,y){const k=bgMode+'/'+z+'/'+x+'/'+y;let t=tcache.get(k);const now=performance.now();
-  if(t){t.used=frameNo;if(t.err&&now-t.errAt>30000){tcache.delete(k);t=null}else return t.ok?t.img:null}
+  if(t){t.used=frameNo;if(t.err&&now-t.errAt>30000){tcache.delete(k);t=null}else return t.ok?(t.bm||t.img):null}
   if(inflight>=10)return null;
   t={img:new Image(),ok:false,err:false,used:frameNo};inflight++;
-  t.img.onload=()=>{t.ok=true;inflight--};t.img.onerror=()=>{t.err=true;t.errAt=performance.now();inflight--};
+  t.img.onload=()=>{inflight--;if(hasIB)createImageBitmap(t.img).then(bm=>{t.bm=bm;t.ok=true}).catch(()=>{t.ok=true});else t.ok=true};t.img.onerror=()=>{t.err=true;t.errAt=performance.now();inflight--};
   t.img.src=BG[bgMode]+z+'/'+y+'/'+x;tcache.set(k,t);
-  if(tcache.size>600){const arr=[...tcache.entries()].sort((a,b)=>a[1].used-b[1].used);for(let i=0;i<150;i++)tcache.delete(arr[i][0])}
+  if(tcache.size>600){const arr=[...tcache.entries()].sort((a,b)=>a[1].used-b[1].used);for(let i=0;i<150;i++){const e=arr[i][1];if(e.bm)e.bm.close();tcache.delete(arr[i][0])}}
   return null}
 function drawBackground(cx,cy,R,s){
   const o=S.origin;if(!o||bgMode==='none')return false;
@@ -454,7 +459,9 @@ document.querySelectorAll('#bgSeg button').forEach(b=>b.addEventListener('click'
 function frame(ts){
   requestAnimationFrame(frame);frameNo++;
   const dt=lastFrame?Math.min(0.1,(ts-lastFrame)/1000):1/60;lastFrame=ts;
-  fpsN++;if(ts-fpsT>=1000){fps=Math.round(fpsN*1000/(ts-fpsT));fpsN=0;fpsT=ts;perfUi()}
+  fpsN++;if(ts-fpsT>=1000){fps=Math.round(fpsN*1000/(ts-fpsT));fpsN=0;fpsT=ts;
+    if(S.started&&!document.hidden){slowSecs=fps<40?slowSecs+1:0;if(slowSecs>=2&&quality>0.45){quality=Math.max(0.45,quality*0.75);slowSecs=0;resize()}}
+    perfUi()}
   const tl=tool();
   if(D.ok){const age=Math.min(1,(performance.now()-F.at)/1000),px=F.x+F.vx*age,py=F.y+F.vy*age,k=1-Math.exp(-dt*14);
     D.x+=(px-D.x)*k;D.y+=(py-D.y)*k;D.h+=angDiff(D.h,S.heading)*(1-Math.exp(-dt*8));
@@ -474,7 +481,7 @@ function frame(ts){
 
   ctx.globalAlpha=.5;ctx.imageSmoothingEnabled=true;
   tiles.forEach(t=>{const x0=t.tx*TM,y0=t.ty*TM;if(x0>cx+R||x0+TM<cx-R||y0>cy+R||y0+TM<cy-R)return;
-    ctx.save();ctx.translate(x0,y0+TM);ctx.scale(1/TPX,-1/TPX);ctx.drawImage(t.c,0,0);ctx.restore()});
+    ctx.save();ctx.translate(x0,y0+TM);ctx.scale(1/TPX,-1/TPX);ctx.drawImage(t.bm&&!t.dirty?t.bm:t.c,0,0);ctx.restore()});
   const lp=S.pts[S.pts.length-1];
   if(S.spraying&&lp&&D.ok&&S.hdgOk){const d=Math.hypot(DT.x-lp.x,DT.y-lp.y);if(d>0.05&&d<10){
     const [L1,R1]=edges(lp),[L2,R2]=edges({x:DT.x,y:DT.y,h:DT.h,w:tl.w});
@@ -524,7 +531,7 @@ function ui(){
   $('sAccBox').classList.toggle('warn',S.acc!=null&&S.acc>8);
 }
 function perfUi(){const hz=fixTimes.length>1?(fixTimes.length-1)*1000/(fixTimes[fixTimes.length-1]-fixTimes[0]):0;
-  $('sAccLbl').textContent='± m · '+fmt(hz,0)+' Hz';$('perf').textContent='Ekran: '+fps+' kl./s · GPS: '+fmt(hz,1)+' odczytów/s'+(nativeOn?' (moduł GPS telefonu)':S.demo?' (demo)':'')}
+  $('sAccLbl').textContent='± m · '+fmt(hz,0)+' Hz';$('perf').textContent='Ekran: '+fps+' kl./s'+(quality<1?' (rozdzielczość '+Math.round(quality*100)+'%)':'')+' · GPS: '+fmt(hz,1)+' odczytów/s'+(nativeOn?' (moduł GPS telefonu)':S.demo?' (demo)':'')}
 let lbKey='';
 function lightbar(){
   const g=guidance();
