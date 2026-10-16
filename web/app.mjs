@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "2.9";
+export const APP_VERSION = "3.0";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -241,6 +241,64 @@ function saveCfg(next, msg) {
 
 // ---------------- elementy ----------------
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+// ---- Kolczyk: podpowiedzi podobnych numerów i blokada powtórzeń ----
+const tagNorm = (s) => (s || "").toUpperCase().replace(/\s+/g, "");
+const tagDigits = (s) => (s || "").replace(/\D/g, "");
+// ten sam kolczyk: identyczny albo te same cyfry (np. "PL005123" = "005123")
+function sameTag(a, b) {
+  const x = tagNorm(a), y = tagNorm(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  const dx = tagDigits(x);
+  return dx.length >= 3 && dx === tagDigits(y);
+}
+const allAnimals = () => [...cows, ...calves];
+const tagOwner = (k, selfId) => allAnimals().find((a) => a.id !== selfId && sameTag(a.kolczyk, k)) || null;
+const animalKind = (a) => (cows.includes(a) ? "krowa" : typOf(a) === "jalowka" ? "jałówka" : a.plec === "b" ? "byczek" : "cielak");
+const animalDesc = (a) => animalKind(a) + (placeOf(a) ? " · " + placeOf(a) : "");
+/** Pod polem kolczyka: lista sztuk o tym samym początku numeru; ten sam numer = czerwony błąd. */
+function tagAssist(input, { selfId = () => null, dupError = true, saveBtn = null, onPick = null } = {}) {
+  const box = el("div", "tagsug"); box.hidden = true; box.setAttribute("aria-live", "polite");
+  (input.closest("label") || input).after(box);
+  const setBad = (bad) => { input.classList.toggle("bad", bad); if (saveBtn) saveBtn.disabled = bad; };
+  const refresh = () => {
+    const v = tagNorm(input.value), d = tagDigits(v);
+    box.replaceChildren(); box.classList.remove("dup");
+    if (!v) { box.hidden = true; setBad(false); return; }
+    const own = tagOwner(v, selfId());
+    if (own && dupError) {
+      box.classList.add("dup");
+      box.append(el("b", null, "Ten kolczyk już jest w gospodarstwie!"), el("span", null, `${own.kolczyk} – ${animalDesc(own)}`));
+      box.hidden = false; setBad(true); return;
+    }
+    setBad(false);
+    const match = (a) => {
+      if (a.id === selfId()) return false;
+      const t = tagNorm(a.kolczyk);
+      return (d.length >= 2 && tagDigits(t).startsWith(d)) || (v.length >= 2 && t.startsWith(v));
+    };
+    const list = d.length >= 2 || v.length >= 2
+      ? allAnimals().filter(match).sort((a, b) => tagDigits(a.kolczyk).localeCompare(tagDigits(b.kolczyk))) : [];
+    if (!list.length) { box.hidden = true; return; }
+    box.append(el("span", "tshead", `Podobne numery (${list.length}):`));
+    const wrap = el("div", "tsl");
+    for (const a of list.slice(0, 12)) {
+      const it = el(onPick ? "button" : "span", "tsi");
+      if (onPick) { it.type = "button"; it.onclick = () => onPick(a); }
+      const t = el("span", "tst"), k = a.kolczyk, plen = d.length >= 2 ? prefixLen(k, d) : v.length;
+      t.append(el("b", null, k.slice(0, plen)), document.createTextNode(k.slice(plen)));
+      it.append(t, el("small", null, animalDesc(a)));
+      wrap.append(it);
+    }
+    if (list.length > 12) wrap.append(el("span", "tsmore", `+ jeszcze ${list.length - 12}`));
+    box.append(wrap); box.hidden = false;
+  };
+  // ile znaków kolczyka obejmuje wpisane cyfry (pomija litery jak "PL")
+  const prefixLen = (k, d) => { let n = 0, i = 0; while (i < k.length && n < d.length) { if (/\d/.test(k[i])) n++; i++; } return i; };
+  input.addEventListener("input", refresh);
+  return { refresh, reset: () => { box.hidden = true; box.replaceChildren(); setBad(false); } };
+}
 function btn(text, cls, fn) { const b = el("button", cls, text); b.type = "button"; b.onclick = fn; return b; }
 function placeSelect(sel, value) {
   sel.replaceChildren();
@@ -865,9 +923,11 @@ function openCow(c, preset = {}) {
   $("saveBtn").textContent = c ? "Zapisz zmiany" : "Zapisz krowę";
   armAbort("abortBtn", "abortHint", "Krowa będzie niecielna, a terminy liczą się od nowa – jak po wycieleniu.");
   $("abortBox").hidden = !c;
+  cowTag.reset(); if (!c && v.kolczyk) cowTag.refresh();
   $("cowDlg").showModal();
   if (!c) $("kolczyk").focus();
 }
+const cowTag = tagAssist($("kolczyk"), { selfId: () => editId, saveBtn: $("saveBtn") });
 ["zacielenie", "ruja"].forEach((id) => $(id).addEventListener("input", updatePreview));
 $("zacielenie").addEventListener("input", () => { $("cielnaSel").value = ""; });
 $("cancelBtn").onclick = () => { editId = null; $("cowDlg").close(); };
@@ -879,7 +939,7 @@ $("form").addEventListener("submit", (e) => {
   const wycielenie = $("wycielenie").value, ruja = $("ruja").value, zacielenie = $("zacielenie").value;
   const ojciec = $("ojciec").value.trim(), byk = $("byk").value.trim(), miejsce = $("miejsce").value, antybiotyk = $("antybiotyk").value.trim();
   if (!kolczyk) return showErr("Wpisz numer kolczyka.");
-  if (cows.some((c) => c.kolczyk === kolczyk && c.id !== editId)) return showErr("Krowa z tym kolczykiem już jest w stadzie.");
+  { const own = tagOwner(kolczyk, editId); if (own) return showErr(`Ten kolczyk już jest: ${own.kolczyk} (${animalDesc(own)}).`); }
   const old = cows.find((c) => c.id === editId) || (editId ? editSeed : null);
   const same = old && old.zacielenie === zacielenie;
   const data = {
@@ -1028,14 +1088,15 @@ function viewQueue(v) {
   add.append(board);
   const or = el("h3", "subh", "Albo wpisz kolczyk ręcznie");
   const kLab = el("label"); kLab.htmlFor = "qKolczyk"; kLab.append(document.createTextNode("Numer kolczyka"));
-  const kIn = el("input"); kIn.id = "qKolczyk"; kIn.autocomplete = "off"; kIn.placeholder = "np. PL005123456789"; kIn.setAttribute("autocapitalize", "characters"); kLab.append(kIn);
+  const kIn = el("input"); kIn.id = "qKolczyk"; kIn.autocomplete = "off"; kIn.placeholder = "np. 005123456789"; kIn.inputMode = "numeric"; kLab.append(kIn);
   const pLab = el("label"); pLab.htmlFor = "qMiejsce"; pLab.append(document.createTextNode("Miejsce"));
   const pSel = el("select"); pSel.id = "qMiejsce"; placeSelect(pSel, ""); pLab.append(pSel);
-  kIn.oninput = () => { const a = findAnimal(kIn.value.trim().toUpperCase().replace(/\s+/g, "")); if (a) pSel.value = placeOf(a); };
+  kIn.oninput = () => { const a = tagOwner(kIn.value); if (a) pSel.value = placeOf(a); };
   const err = el("p", "err"); err.hidden = true;
   const sub = el("button", "primary", "Dodaj do listy"); sub.type = "submit";
   const manual = el("div", "qmanual"); manual.append(or, kLab, pLab, err, sub);
   add.append(manual);
+  tagAssist(kIn, { dupError: false, onPick: (a) => { kIn.value = a.kolczyk; kIn.dispatchEvent(new Event("input")); } });
   add.onsubmit = (e) => {
     e.preventDefault();
     const k = kIn.value.trim().toUpperCase().replace(/\s+/g, "");
@@ -1233,9 +1294,11 @@ function openCalf(c, mode) {
   armAbort("cAbortBtn", "cAbortHint", "Jałówka przejdzie do krów jak po wycieleniu – terminy liczą się od dziś.");
   $("cAbortBox").hidden = !(c && calfMode === "jalowka");
   updateCalfPreview();
+  calfTag.reset();
   $("calfDlg").showModal();
   if (!c) $("cKolczyk").focus();
 }
+const calfTag = tagAssist($("cKolczyk"), { selfId: () => calfEditId, saveBtn: $("calfForm").querySelector('button[type="submit"]') });
 $("cWiek").addEventListener("input", () => {
   const m = parseInt($("cWiek").value, 10);
   if (Number.isFinite(m) && m >= 0) $("cUrodzona").value = L.addMonths(L.todayISO(), -m);
@@ -1253,7 +1316,7 @@ $("calfForm").addEventListener("submit", (e) => {
   if (!kolczyk) return err("Wpisz numer kolczyka.");
   if (!urodzona) return err("Wpisz datę urodzenia albo wiek w miesiącach.");
   if (urodzona > L.todayISO()) return err("Data urodzenia nie może być z przyszłości.");
-  if (calves.some((c) => c.kolczyk === kolczyk && c.id !== calfEditId) || cows.some((c) => c.kolczyk === kolczyk)) return err("Zwierzę z tym kolczykiem już jest.");
+  { const own = tagOwner(kolczyk, calfEditId); if (own) return err(`Ten kolczyk już jest: ${own.kolczyk} (${animalDesc(own)}).`); }
   const data = {
     kolczyk, urodzona, typ: calfMode, plec: calfMode === "cielak" && $("cB").checked ? "b" : "j",
     miejsce: $("cMiejsce").value, matka: $("cMatka").value.trim().toUpperCase().replace(/\s+/g, ""), ojciec: $("cOjciec").value.trim(),

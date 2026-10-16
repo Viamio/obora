@@ -238,3 +238,18 @@ small.dni{font-size:.75em;font-weight:500;opacity:.75;white-space:nowrap}
 .htxt{display:flex;gap:10px;align-items:baseline;min-width:0}
 .htxt small{color:var(--muted);font-variant-numeric:tabular-nums;flex:0 0 auto}
 .htxt span{min-width:0;overflow-wrap:anywhere}
+
+/* Kolczyk: podpowiedzi podobnych numerów */
+input.bad{border-color:var(--soon);background:var(--soon-bg)}
+.tagsug{margin-top:-6px;display:flex;flex-direction:column;gap:6px;font-size:.88rem}
+.tagsug .tshead{color:var(--muted)}
+.tagsug .tsl{display:flex;flex-wrap:wrap;gap:6px}
+.tagsug .tsi{display:flex;flex-direction:column;align-items:flex-start;padding:5px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);font:inherit;color:var(--fg);text-align:left}
+button.tsi{cursor:pointer}
+.tagsug .tst{font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.tagsug .tst b{color:var(--accent)}
+.tagsug small{color:var(--muted);font-size:.75rem}
+.tagsug .tsmore{align-self:center;color:var(--muted)}
+.tagsug.dup{background:var(--soon-bg);color:var(--soon);border-radius:10px;padding:10px 12px}
+.tagsug.dup span{color:var(--fg)}
+button:disabled{opacity:.5;cursor:not-allowed}
