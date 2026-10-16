@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "3.1";
+export const APP_VERSION = "3.2";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -828,6 +828,8 @@ function viewSettings(v) {
   }
   v.append(s2);
 
+  v.append(backupSection());
+
   // --- telefon ---
   const s3 = el("section", "card");
   s3.append(el("h2", null, "Ten telefon"));
@@ -976,6 +978,118 @@ $("form").addEventListener("submit", (e) => {
 });
 
 // ---------------- zdjęcia ----------------
+// ---------------- kopia zapasowa do pliku ----------------
+const BACKUP_KIND = "obora-kopia";
+function backupSection() {
+  const s = el("section", "card");
+  s.append(el("h2", null, "Kopia zapasowa"),
+    el("p", "hint", "Zapisuje całe gospodarstwo do jednego pliku: krowy, jałówki, cielaki, miejsca, ustawienia i listę do zacielenia. Trzymaj go np. na Dysku Google, w mailu albo na komputerze. Z tego pliku przywrócisz wszystko bez ponownego wpisywania."));
+  const last = LS.get("obora_kopia");
+  const info = el("p", "hint bkinfo", last ? `Ostatnia kopia z tego telefonu: ${L.fmt(last)}` : "Z tego telefonu nie zrobiono jeszcze kopii.");
+  if (!last || L.daysBetween(last, L.todayISO()) > 30) info.classList.add("warnt");
+  const withPh = el("label", "chk");
+  const cb = el("input"); cb.type = "checkbox"; cb.id = "bkPhotos"; cb.checked = true;
+  withPh.append(cb, document.createTextNode(" Ze zdjęciami krów (plik będzie większy)"));
+  const row = el("div", "bkrow");
+  const saveB = btn("Zapisz kopię do pliku", "primary", () => exportBackup(cb.checked, saveB));
+  const fileIn = el("input"); fileIn.type = "file"; fileIn.accept = ".json,application/json"; fileIn.className = "vh"; fileIn.id = "bkFile";
+  const loadL = el("label", "phbtn", "Wczytaj kopię z pliku"); loadL.htmlFor = "bkFile";
+  row.append(saveB, loadL, fileIn);
+  const box = el("div", "bkbox");
+  fileIn.onchange = () => { const f = fileIn.files?.[0]; fileIn.value = ""; if (f) readBackup(f, box); };
+  s.append(info, withPh, row, box);
+  return s;
+}
+async function exportBackup(photos, b) {
+  b.disabled = true; const t = b.textContent; b.textContent = "Przygotowuję…";
+  try {
+    const zdjecia = {};
+    if (photos) {
+      const withFoto = [...cows, ...calves].filter((a) => a.foto);
+      await Promise.all(withFoto.map(async (a) => {
+        const hit = photoCache.get(a.id);
+        if (hit && hit.v === a.foto) { zdjecia[a.id] = hit.url; return; }
+        try { const d = (await getDoc(photoRef(farm, a.id))).data(); if (d?.data) zdjecia[a.id] = d.data; } catch {}
+      }));
+    }
+    const data = {
+      rodzaj: BACKUP_KIND, wersja: 1, aplikacja: APP_VERSION, zapisano: new Date().toISOString(), gospodarstwo: farm,
+      ustawienia: cfg,
+      krowy: cows.map((c) => ({ id: c.id, ...rowData(c) })),
+      mlodziez: calves.map((c) => ({ id: c.id, ...rowData(c) })),
+      dozacielenia: queue.map((q) => ({ id: q.id, ...rowData(q) })),
+      zdjecia,
+    };
+    const today = L.todayISO();
+    const name = `obora-kopia-${today}.json`;
+    const file = new File([JSON.stringify(data)], name, { type: "application/json" });
+    let done = false;
+    if (isIOS && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: "Kopia Obory" }); done = true; }
+      catch (e) { if (e?.name === "AbortError") { status("Anulowano zapis kopii."); return; } }
+    }
+    if (!done) {
+      const url = URL.createObjectURL(file);
+      const a = el("a"); a.href = url; a.download = name; document.body.append(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    }
+    LS.set("obora_kopia", today);
+    const n = data.krowy.length + data.mlodziez.length;
+    status(`Zapisano kopię: ${n} ${odm(n, "sztuka", "sztuki", "sztuk")}${photos ? ` i zdjęcia: ${Object.keys(zdjecia).length}` : ""} → plik ${name}${done ? "" : " (w Pobranych)"}.`);
+    render();
+  } catch { status("Nie udało się zapisać kopii."); }
+  finally { b.disabled = false; b.textContent = t; }
+}
+function readBackup(f, box) {
+  const r = new FileReader();
+  r.onerror = () => status("Nie udało się odczytać pliku.");
+  r.onload = () => {
+    let d;
+    try { d = JSON.parse(r.result); } catch { d = null; }
+    if (!d || d.rodzaj !== BACKUP_KIND || !Array.isArray(d.krowy)) {
+      box.replaceChildren(el("p", "err", "To nie jest plik kopii Obory.")); return;
+    }
+    const kr = d.krowy.length, ml = (d.mlodziez || []).length, ph = Object.keys(d.zdjecia || {}).length;
+    const when = d.zapisano ? new Date(d.zapisano).toLocaleString("pl-PL", { dateStyle: "long", timeStyle: "short" }) : "?";
+    const ids = new Set([...cows, ...calves].map((a) => a.id));
+    const newer = [...d.krowy, ...(d.mlodziez || [])].filter((a) => !ids.has(a.id)).length;
+    const card = el("div", "bkconfirm");
+    card.append(el("b", null, `Kopia z ${when}`),
+      el("p", null, `Krowy: ${kr} · jałówki i cielaki: ${ml}${ph ? ` · zdjęcia: ${ph}` : ""}.${newer ? ` Brakuje teraz ${newer} ${odm(newer, "sztuki", "sztuk", "sztuk")} z kopii – wrócą.` : ""}`),
+      el("p", "hint", "Sztuki z kopii nadpiszą swoje obecne dane. Sztuki dodane po zrobieniu kopii zostaną bez zmian. Zmiany zobaczą wszystkie telefony."));
+    const row = el("div", "row");
+    row.append(btn("Anuluj", "ghost", () => box.replaceChildren()), btn("Przywróć dane", "primary", (e) => restoreBackup(d, box, e.currentTarget)));
+    card.append(row);
+    box.replaceChildren(card);
+  };
+  r.readAsText(f);
+}
+async function restoreBackup(d, box, b) {
+  b.disabled = true; b.textContent = "Przywracam…";
+  const ops = [];
+  const clean = (o) => { const { id, ...r } = o || {}; return r; };
+  for (const c of d.krowy) if (c?.id) ops.push([doc(cowsCol(farm), c.id), clean(c)]);
+  for (const c of d.mlodziez || []) if (c?.id) ops.push([doc(calvesCol(farm), c.id), clean(c)]);
+  for (const q of d.dozacielenia || []) if (q?.id) ops.push([doc(queueCol(farm), q.id), clean(q)]);
+  for (const [id, data] of Object.entries(d.zdjecia || {})) if (typeof data === "string") ops.push([photoRef(farm, id), { data, zmieniono: Date.now() }]);
+  if (d.ustawienia) ops.push([cfgDocRef(farm), { ...cfg, ...d.ustawienia }]);
+  try {
+    // zdjęcia są duże – mniejsze paczki
+    let batch = writeBatch(db), n = 0, size = 0;
+    for (const [ref, data] of ops) {
+      const sz = JSON.stringify(data).length;
+      if (n >= 400 || size + sz > 8e6) { await batch.commit(); batch = writeBatch(db); n = 0; size = 0; }
+      batch.set(ref, data); n++; size += sz;
+    }
+    if (n) await batch.commit();
+    photoCache.clear();
+    box.replaceChildren(el("p", "okt", `Przywrócono z kopii – krowy: ${d.krowy.length}, jałówki i cielaki: ${(d.mlodziez || []).length}.`));
+    status(`Przywrócono z kopii – krowy: ${d.krowy.length}, jałówki i cielaki: ${(d.mlodziez || []).length}.`);
+  } catch {
+    b.disabled = false; b.textContent = "Przywróć dane";
+    status("Nie udało się przywrócić – sprawdź internet i spróbuj jeszcze raz.");
+  }
+}
 const photoCache = new Map();   // id -> { v, url }
 const photoLoading = new Set();
 let photoRenderTimer = null;

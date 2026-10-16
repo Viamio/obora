@@ -259,3 +259,12 @@ button:disabled{opacity:.5;cursor:not-allowed}
 @media (max-width:340px){.tagrow{grid-template-columns:1fr}}
 .tag .tname{font-family:var(--body);font-weight:600;font-size:.72em;letter-spacing:0;padding-left:8px;border-left:1.5px solid color-mix(in srgb,var(--tag-fg) 35%,transparent)}
 .qname{display:block;font-size:.7rem;color:var(--muted);font-weight:500;line-height:1.1}
+
+/* Kopia zapasowa */
+.chk{flex-direction:row;align-items:center;gap:8px;font-weight:500}
+.chk input{width:22px;height:22px;accent-color:var(--accent)}
+.bkinfo.warnt{color:var(--warn);font-weight:600}
+.bkconfirm{display:flex;flex-direction:column;gap:6px;background:var(--warn-bg);border-radius:10px;padding:12px 14px;margin-top:10px}
+.bkconfirm p{margin:0}
+.okt{color:var(--accent);font-weight:600;margin:10px 0 0}
+.bkrow{display:flex;flex-direction:column;gap:8px;margin-top:6px}.bkrow>*{width:100%;justify-content:center}
