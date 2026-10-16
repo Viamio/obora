@@ -112,6 +112,11 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .updBanner b{flex:none;background:var(--amber);color:#1b1404;font-family:var(--display);font-size:18px;letter-spacing:.06em;text-transform:uppercase;padding:9px 14px;border-radius:9px}
 .updBanner span{min-width:0}
 .updBanner.busy b{background:#5a4520;color:var(--fg)}
+.seg3{grid-template-columns:repeat(3,1fr)}
+.attrib{position:fixed;left:max(10px,env(safe-area-inset-left,0px));bottom:calc(env(safe-area-inset-bottom,0px) + 158px);font-size:10px;color:#eef3eacc;background:#0009;padding:2px 6px;border-radius:4px;pointer-events:none}
+.icon svg{width:24px;height:24px;display:block}
+.stack{display:flex;flex-direction:column;gap:10px}
+.bigstat{font-family:var(--display);font-size:34px;font-weight:700;font-variant-numeric:tabular-nums}
 .toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 120px);transform:translateX(-50%);background:#000d;border:1px solid var(--line);padding:10px 16px;border-radius:14px;font-size:14px;max-width:90%;text-align:center;z-index:20}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -137,9 +142,11 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   <button class="icon" id="zin" aria-label="Przybliż">+</button>
   <button class="icon" id="zout" aria-label="Oddal">−</button>
   <button class="icon active" id="center" aria-label="Wyśrodkuj na ciągniku">◎</button>
+  <button class="icon" id="trash" aria-label="Usuń zaznaczony obszar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg></button>
   <button class="icon" id="menu" aria-label="Ustawienia">☰</button>
 </div>
 <div class="demoTag" id="demoTag" hidden>DEMO</div>
+<div class="attrib" id="attrib" hidden>Zdjęcia: Esri, Maxar, Earthstar Geographics</div>
 
 <div class="bottom">
   <div class="pad" id="pad" hidden>
@@ -176,6 +183,9 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
     <div class="curTool"><div><b id="setTool">—</b><span id="setToolSub">—</span></div><button id="setChange">Zmień sprzęt</button></div>
     <div><div class="note" style="margin-bottom:6px">Obrót mapy</div>
       <div class="seg"><button id="oHead" class="sel">Kierunek jazdy w górę</button><button id="oNorth">Północ w górę</button></div></div>
+    <div><div class="note" style="margin-bottom:6px">Tło mapy</div>
+      <div class="seg seg3" id="bgSeg"><button data-bg="none">Brak</button><button data-bg="sat">Satelita</button><button data-bg="map">Mapa</button></div>
+      <p class="note" style="margin-top:6px">Tło wymaga internetu. Raz obejrzane miejsca zostają w pamięci telefonu.</p></div>
     <div class="upd" id="updBox" hidden>
       <div class="row"><div><b>Aktualizacja</b><div class="note" id="updText">—</div></div><button class="btn" id="updBtn">Sprawdź</button></div>
       <div class="bar" id="updBar" hidden><i id="updFill"></i></div>
@@ -184,6 +194,17 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
     <button class="btn wide danger" id="newField">Nowe pole<small>kasuje zrobiony obszar</small></button>
     <p class="note" id="perf" style="color:var(--fg)">Ekran: — kl./s</p>
     <p class="note">GPS w telefonie ma dokładność ok. 2–5 m, więc pasy mogą się lekko rozjeżdżać. Telefon trzymaj w stałym miejscu w kabinie. Ekran nie wygasa, dopóki aplikacja jest otwarta.</p>
+  </div>
+</div>
+
+<!-- Clear worked area -->
+<div class="sheet" id="clearSheet" hidden>
+  <div class="sheet-in stack">
+    <div class="row"><h2>Usuń zaznaczenie</h2><button class="icon" id="closeClear" aria-label="Zamknij">✕</button></div>
+    <div><div class="note">Zaznaczony obszar</div><div class="bigstat" id="clrArea">0,00 ha</div></div>
+    <button class="btn wide" id="undoPass">Cofnij ostatni przejazd<small>usuwa pas od ostatniego włączenia pracy</small></button>
+    <button class="btn wide danger" id="clearAll">Usuń cały zaznaczony obszar<small>linia AB i sprzęt zostają</small></button>
+    <button class="btn wide" id="cancelClear">Anuluj</button>
   </div>
 </div>
 
@@ -353,7 +374,7 @@ function startGps(){
 /* ---------- demo: drive with arrows ---------- */
 const DM={x:0,y:0,h:Math.PI/2,v:2.5,steer:0,timer:null,last:0};
 function startDemo(){
-  S.demo=true;S.pts=[];S.cur=null;S.A=S.B=null;D.ok=false;F.at=0;F.vx=F.vy=0;resetTrack();S.breakNext=false;rebuild();
+  S.demo=true;if(!S.origin)S.origin={lat:52.0525,lon:19.4105};S.pts=[];S.cur=null;S.A=S.B=null;D.ok=false;F.at=0;F.vx=F.vy=0;resetTrack();S.breakNext=false;rebuild();
   DM.x=0;DM.y=0;DM.h=Math.PI/2;DM.v=2.5;DM.steer=0;DM.last=performance.now();
   $('pad').hidden=false;$('demoTag').hidden=false;$('exitDemoSet').hidden=false;
   abUi();padUi();
@@ -397,8 +418,41 @@ function rot(){return S.headUp?D.h-Math.PI/2:0}
 function anchor(){return{x:Wpx/2,y:S.follow&&S.headUp?Hpx*0.5:Hpx*0.48}}
 function angDiff(a,b){let d=b-a;while(d>Math.PI)d-=2*Math.PI;while(d<-Math.PI)d+=2*Math.PI;return d}
 let lastFrame=0,fps=0,fpsN=0,fpsT=0,uiT=0;
+/* background map (Esri World Imagery / World Topo Map) placed on the local metric grid */
+const BG={sat:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/',
+  map:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/'};
+let bgMode=lsGet('gpsPole.bg')||'none';if(!BG[bgMode])bgMode='none';
+const tcache=new Map();let inflight=0,frameNo=0;
+function getTile(z,x,y){const k=bgMode+'/'+z+'/'+x+'/'+y;let t=tcache.get(k);const now=performance.now();
+  if(t){t.used=frameNo;if(t.err&&now-t.errAt>30000){tcache.delete(k);t=null}else return t.ok?t.img:null}
+  if(inflight>=10)return null;
+  t={img:new Image(),ok:false,err:false,used:frameNo};inflight++;
+  t.img.onload=()=>{t.ok=true;inflight--};t.img.onerror=()=>{t.err=true;t.errAt=performance.now();inflight--};
+  t.img.src=BG[bgMode]+z+'/'+y+'/'+x;tcache.set(k,t);
+  if(tcache.size>600){const arr=[...tcache.entries()].sort((a,b)=>a[1].used-b[1].used);for(let i=0;i<150;i++)tcache.delete(arr[i][0])}
+  return null}
+function drawBackground(cx,cy,R,s){
+  const o=S.origin;if(!o||bgMode==='none')return false;
+  const cosl=Math.cos(o.lat*Math.PI/180),toLon=x=>o.lon+x/(111320*cosl),toLat=y=>o.lat+y/110574;
+  const lx=lon=>(lon-o.lon)*111320*cosl,ly=lat=>(lat-o.lat)*110574;
+  const z=Math.max(3,Math.min(19,Math.round(Math.log2(156543.03*cosl*s))));
+  const lonW=toLon(cx-R),lonE=toLon(cx+R),latS=Math.max(-84,toLat(cy-R)),latN=Math.min(84,toLat(cy+R));
+  const tX=(lon,n)=>Math.floor((lon+180)/360*n),tY=(lat,n)=>{const r=lat*Math.PI/180;return Math.floor((1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*n)};
+  const lonOf=(x,n)=>x/n*360-180,latOf=(y,n)=>Math.atan(Math.sinh(Math.PI*(1-2*y/n)))*180/Math.PI;
+  ctx.imageSmoothingEnabled=true;
+  [z-3,z].forEach(zz=>{if(zz<2)return;const n=2**zz,x0=tX(lonW,n),x1=tX(lonE,n),y0=tY(latN,n),y1=tY(latS,n);
+    if((x1-x0+1)*(y1-y0+1)>90)return;
+    for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++){const img=getTile(zz,x,y);if(!img)continue;
+      const X0=lx(lonOf(x,n)),X1=lx(lonOf(x+1,n)),YN=ly(latOf(y,n)),YS=ly(latOf(y+1,n));
+      ctx.save();ctx.translate(X0,YN);ctx.scale((X1-X0)/256*1.002,-(YN-YS)/256*1.002);ctx.drawImage(img,0,0);ctx.restore()}});
+  ctx.fillStyle=bgMode==='sat'?'rgba(6,10,6,.22)':'rgba(6,10,6,.45)';ctx.fillRect(cx-R,cy-R,2*R,2*R);
+  return true}
+function setBg(m){bgMode=m;lsSet('gpsPole.bg',m);document.querySelectorAll('#bgSeg button').forEach(b=>b.classList.toggle('sel',b.dataset.bg===m));
+  $('attrib').hidden=m==='none';$('attrib').textContent=m==='sat'?'Zdjęcia: Esri, Maxar, Earthstar Geographics':'Mapa: Esri, HERE, Garmin, OpenStreetMap'}
+document.querySelectorAll('#bgSeg button').forEach(b=>b.addEventListener('click',()=>{setBg(b.dataset.bg);if(b.dataset.bg!=='none'&&!S.origin)toast('Tło pojawi się po złapaniu sygnału GPS.')}));
+
 function frame(ts){
-  requestAnimationFrame(frame);
+  requestAnimationFrame(frame);frameNo++;
   const dt=lastFrame?Math.min(0.1,(ts-lastFrame)/1000):1/60;lastFrame=ts;
   fpsN++;if(ts-fpsT>=1000){fps=Math.round(fpsN*1000/(ts-fpsT));fpsN=0;fpsT=ts;perfUi()}
   const tl=tool();
@@ -412,10 +466,11 @@ function frame(ts){
   ctx.translate(a.x,a.y);ctx.rotate(r);ctx.scale(s,-s);ctx.translate(-S.cam.x,-S.cam.y);
   const R=Math.hypot(Wpx,Hpx)/s,cx=S.cam.x,cy=S.cam.y;
 
-  const step=s>3?10:s>0.8?50:200;ctx.lineWidth=1/s;ctx.strokeStyle='rgba(147,160,144,.10)';ctx.beginPath();
+  const hasBg=drawBackground(cx,cy,R*0.62,s);
+  const step=s>3?10:s>0.8?50:200;ctx.lineWidth=1/s;if(hasBg)ctx.globalAlpha=.35;ctx.strokeStyle='rgba(147,160,144,.10)';ctx.beginPath();
   for(let gx=Math.floor((cx-R)/step)*step;gx<=cx+R;gx+=step){ctx.moveTo(gx,cy-R);ctx.lineTo(gx,cy+R)}
   for(let gy=Math.floor((cy-R)/step)*step;gy<=cy+R;gy+=step){ctx.moveTo(cx-R,gy);ctx.lineTo(cx+R,gy)}
-  ctx.stroke();
+  ctx.stroke();ctx.globalAlpha=1;
 
   ctx.globalAlpha=.5;ctx.imageSmoothingEnabled=true;
   tiles.forEach(t=>{const x0=t.tx*TM,y0=t.ty*TM;if(x0>cx+R||x0+TM<cx-R||y0>cy+R||y0+TM<cy-R)return;
@@ -563,6 +618,21 @@ $('closeSet').addEventListener('click',()=>{$('settings').hidden=true});
 $('oHead').addEventListener('click',()=>{S.headUp=true;orientUi();saveSoon()});
 $('oNorth').addEventListener('click',()=>{S.headUp=false;orientUi();saveSoon()});
 $('clearAB').addEventListener('click',()=>{S.A=S.B=null;abUi();saveSoon();toast('Linia AB usunięta.')});
+function openClear(){$('clrArea').textContent=fmt(cells.size/10000,2)+' ha';const b=$('clearAll');delete b.dataset.arm;
+  b.innerHTML='Usuń cały zaznaczony obszar<small>linia AB i sprzęt zostają</small>';$('clearSheet').hidden=false}
+$('trash').addEventListener('click',openClear);
+$('closeClear').addEventListener('click',()=>$('clearSheet').hidden=true);
+$('cancelClear').addEventListener('click',()=>$('clearSheet').hidden=true);
+$('clearSheet').addEventListener('click',e=>{if(e.target.id==='clearSheet')$('clearSheet').hidden=true});
+$('undoPass').addEventListener('click',()=>{
+  let i=S.pts.length-1;while(i>=0&&!S.pts[i].on)i--;
+  if(i<0){toast('Nie ma czego cofać.');return}
+  while(i>=0&&S.pts[i].on){S.pts[i].on=false;i--}
+  rebuild();ui();save();$('clrArea').textContent=fmt(cells.size/10000,2)+' ha';toast('Ostatni przejazd cofnięty.')});
+$('clearAll').addEventListener('click',e=>{const b=e.currentTarget;
+  if(!b.dataset.arm){b.dataset.arm='1';b.innerHTML='Dotknij ponownie, aby usunąć<small>tego nie da się cofnąć</small>';return}
+  S.pts=[];S.breakNext=true;rebuild();ui();save();$('clearSheet').hidden=true;toast('Zaznaczony obszar usunięty.')});
+
 let armT=0;$('newField').addEventListener('click',e=>{const b=e.currentTarget;
   if(!b.dataset.arm){b.dataset.arm='1';b.innerHTML='Dotknij ponownie<small>aby skasować pole</small>';clearTimeout(armT);armT=setTimeout(()=>{delete b.dataset.arm;b.innerHTML='Nowe pole<small>kasuje zrobiony obszar</small>'},3000);return}
   delete b.dataset.arm;b.innerHTML='Nowe pole<small>kasuje zrobiony obszar</small>';
@@ -591,7 +661,7 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 const saved=lsGet(KEY);
 if(saved&&saved.origin){S.origin=saved.origin;S.pts=saved.pts||[];S.A=saved.A;S.B=saved.B;S.headUp=saved.headUp!==false;rebuild();$('resumeNote').hidden=!S.pts.length;S.breakNext=true;
   const l=S.pts[S.pts.length-1];if(l){S.cam.x=l.x;S.cam.y=l.y}}
-toolUi();orientUi();abUi();sprayUi();ui();
+toolUi();orientUi();abUi();sprayUi();ui();setBg(bgMode);
 function begin(){$('start').hidden=true;S.started=true;resize();fitZoom();wake()}
 $('goGps').addEventListener('click',()=>{begin();startGps()});
 $('goDemo').addEventListener('click',()=>{begin();startDemo();toast('Steruj strzałkami ◀ ▶, prędkość ▲ ▼. Włącz pracę przyciskiem na środku.')});
