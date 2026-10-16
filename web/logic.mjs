@@ -118,14 +118,25 @@ export function ageText(born, today = todayISO()) {
 export const breedDate = (c, cfg) => (c.plec === "j" && c.urodzona ? addMonths(c.urodzona, cfg.krycie) : null);
 
 /** Zadania dla młodzieży: jałówka gotowa do krycia. */
-export function calfAlerts(calves, cfg, ahead, today = todayISO()) {
+export function calfAlerts(calves, cfg, ahead, today = todayISO(), dueAhead) {
   const out = [];
   const late = cfg.zalegle ?? 30;
+  const push = (c, kind, date, title, sub, limit = ahead) => {
+    if (!date || hidden(c, kind, date)) return;
+    const n = daysBetween(today, date);
+    if (n <= limit && n >= -late) out.push({ cow: c, calf: true, kind, date, n, title, sub });
+  };
   for (const c of calves) {
+    // zacielona jałówka: badanie cielności, porodówka, wycielenie (bez zasuszania)
+    if (c.zacielenie && c.cielna !== "nie") {
+      push(c, "check", checkDate(c, cfg), "Sprawdzić czy cielna", `${fmt(checkDate(c, cfg))} (${cfg.check} dni po zacieleniu)`);
+      if (!c.przegnana) push(c, "move", moveDate(c, cfg), "Przegnać na porodówkę", `${fmt(moveDate(c, cfg))} (${cfg.move} dni przed porodem)`);
+      const d = due(c);
+      if (d) push(c, "due", d, daysBetween(today, d) < 0 ? "Po terminie wycielenia" : "Wycielenie jałówki", `Termin ${fmt(d)}`, dueAhead ?? 14);
+      continue;
+    }
     const d = breedDate(c, cfg);
-    if (!d || hidden(c, "krycie", d)) continue;
-    const n = daysBetween(today, d);
-    if (n <= ahead && n >= -late) out.push({ cow: c, calf: true, kind: "krycie", date: d, n, title: "Jałówka gotowa do krycia", sub: `${fmt(d)} (${cfg.krycie} mies. od urodzenia)` });
+    push(c, "krycie", d, "Jałówka gotowa do krycia", `${fmt(d)} (${cfg.krycie} mies. od urodzenia)`);
   }
   return out.sort((a, b) => a.n - b.n);
 }

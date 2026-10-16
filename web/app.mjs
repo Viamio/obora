@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "3.2";
+export const APP_VERSION = "3.3";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -216,7 +216,7 @@ async function testNotif() {
   status("Wysłano – sprawdź pasek powiadomień.");
 }
 const allAlerts = (cs, ks, ahead, dueAhead) =>
-  [...L.alerts(cs, cfg, ahead, dueAhead), ...L.calfAlerts(ks, cfg, ahead)].sort((a, b) => (a.sort ?? a.n) - (b.sort ?? b.n));
+  [...L.alerts(cs, cfg, ahead, dueAhead), ...L.calfAlerts(ks, cfg, ahead, undefined, dueAhead)].sort((a, b) => (a.sort ?? a.n) - (b.sort ?? b.n));
 
 // ---------------- zapis ----------------
 const rowData = (c) => { const { id, ...r } = c; return r; };
@@ -383,13 +383,13 @@ function render(dir = 0) {
   if (dir) { v.classList.remove("in-l", "in-r"); void v.offsetWidth; v.classList.add(dir > 0 ? "in-r" : "in-l"); }
 }
 
-function statsRow(cs) {
+function statsRow(cs, ks = calves) {
   const today = L.todayISO();
   const row = el("div", "stats");
   const st = (n, label) => { const d = el("div", "stat"); d.append(el("b", null, String(n)), el("span", null, label)); return d; };
   row.append(
     st(cs.length, "Krów"),
-    st(cs.filter((c) => L.pregnant(c)).length, "Zacielonych"),
+    st(cs.filter((c) => L.pregnant(c)).length + ks.filter((c) => typOf(c) === "jalowka" && L.pregnant(c)).length, "Zacielonych"),
     st(cs.filter((c) => { const d = L.due(c); if (!d) return false; const n = L.daysBetween(today, d); return n >= 0 && n <= 30; }).length, "Poród ≤ 30 dni"),
   );
   return row;
@@ -484,9 +484,9 @@ function viewCalves(v, typ) {
     const nb = ks.filter((c) => c.plec === "b").length;
     v.append(el("p", "hint", `${nb} ${odm(nb, "byk", "byki", "byków")} · ${ks.length - nb} ${odm(ks.length - nb, "jałoszka", "jałoszki", "jałoszek")}. Gdy jałoszka podrośnie, stuknij przy niej „Do jałówek”.`));
   } else {
-    v.append(el("p", "hint", `Jałówki są gotowe do krycia po ${cfg.krycie} miesiącach (zmienisz w Ustawieniach). Rano dostaniesz o tym powiadomienie.`));
+    v.append(el("p", "hint", `Jałówki są gotowe do krycia po ${cfg.krycie} miesiącach (zmienisz w Ustawieniach). Datę zacielenia wpiszesz w Edytuj – policzy się termin porodu.`));
   }
-  alertsSection(v, [], ks, typ === "cielak" ? "Do zrobienia" : "Do krycia");
+  alertsSection(v, [], ks, "Do zrobienia");
   const list = el("div", "list");
   if (!ks.length) list.append(el("div", "empty", typ === "cielak"
     ? "Brak cielaków. Dodaj pierwszego przyciskiem „+ Dodaj cielaka” na dole: kolczyk, byk albo jałoszka, data urodzenia albo wiek."
@@ -513,15 +513,16 @@ function alertsSection(v, cs, ks, title = "Do zrobienia") {
     x.setAttribute("aria-label", "Ukryj to zadanie"); x.title = "Ukryj to zadanie";
     const head = el("div", "ahead"); head.append(tagEl(c), x);
     row.append(head, t, ab);
+    const upd = a.calf ? (ch, msg) => { writeCalf(c.id, { ...rowData(c), ...ch }); status(msg); } : (ch, msg) => patch(c, ch, msg);
     const zacielona = () => { openCow(c, { zacielenie: today, ruja: today }); status("Wpisz, jakim bykiem zacielona, i naciśnij Zapisz."); setTimeout(() => $("byk").focus(), 50); };
-    if (a.kind === "check") ab.append(btn("Cielna", "okbtn", () => patch(c, { cielna: "tak" }, `${c.kolczyk}: cielna`)), btn("Niecielna", "nobtn", () => patch(c, { cielna: "nie" }, `${c.kolczyk}: niecielna`)));
+    if (a.kind === "check") ab.append(btn("Cielna", "okbtn", () => upd({ cielna: "tak" }, `${c.kolczyk}: cielna`)), btn("Niecielna", "nobtn", () => upd({ cielna: "nie" }, `${c.kolczyk}: niecielna`)));
     if (a.kind === "dry") ab.append(btn("Zasuszona", "okbtn", () => openDry(c)));
-    if (a.kind === "move") ab.append(btn("Przegnana", "okbtn", () => patch(c, { przegnana: true }, `${c.kolczyk}: na porodówce`)));
+    if (a.kind === "move") ab.append(btn("Przegnana", "okbtn", () => upd({ przegnana: true }, `${c.kolczyk}: na porodówce`)));
     if (a.kind === "ruja") ab.append(btn("Grzeje się dziś", "nobtn", () => patch(c, { ruja: today }, `${c.kolczyk}: ruja zapisana`)), btn("Zacielona dziś", "okbtn", zacielona));
     if (a.kind === "insem") ab.append(btn("Zacielona dziś", "okbtn", zacielona));
-    if (a.kind === "due") ab.append(btn("Wycieliła się", "okbtn", () => calved(c, today)));
+    if (a.kind === "due") ab.append(btn("Wycieliła się", "okbtn", () => a.calf ? toHerd(c, { wycielenie: today }) : calved(c, today)));
     if (a.kind === "karencjaOk") ab.append(btn("OK, doję", "okbtn", () => patch(c, { karencjaOk: true }, `${c.kolczyk}: karencja zakończona`)));
-    if (a.kind === "krycie") ab.append(btn("Zacielona dziś", "okbtn", () => toHerd(c, { zacielenie: today, ruja: today })), btn("Do stada krów", "nobtn", () => toHerd(c, {})));
+    if (a.kind === "krycie") ab.append(btn("Zacielona dziś", "okbtn", () => heiferInsem(c, today)), btn("Do stada krów", "nobtn", () => toHerd(c, {})));
     box.append(row);
   }
   sec.append(box);
@@ -634,8 +635,14 @@ function calfCard(c) {
     ["Matka", c.matka || "—"],
     ["Po byku", c.ojciec || "—"],
   ];
-  if (c.plec !== "b") items.push(["Do krycia", breedTxt], ["Miesięcy", c.urodzona ? String(L.monthsOld(c.urodzona, today)) : "—"]);
-  for (const [k, val] of items) { const w = el("div"); w.append(el("dt", null, k), el("dd", k === "Do krycia" && bd && L.daysBetween(today, bd) <= 0 ? "big" : null, val)); dl.append(w); }
+  const ins = typOf(c) === "jalowka" && c.zacielenie;
+  if (ins) {
+    const d = L.due(c);
+    items.push(["Zacielona", L.fmt(c.zacielenie)], ["Zacielona bykiem", c.byk || "—"],
+      ["Sprawdzić cielność", c.cielna ? "—" : L.fmt(L.checkDate(c, cfg))], ["Termin porodu", d ? `${L.fmt(d)} (${L.kiedy(L.daysBetween(today, d))})` : "—"]);
+    left.append(el("span", "chip " + (c.cielna === "tak" ? "yes" : c.cielna === "nie" ? "no" : ""), c.cielna === "tak" ? "Cielna" : c.cielna === "nie" ? "Niecielna" : "Zacielona"));
+  } else if (c.plec !== "b") items.push(["Do krycia", breedTxt], ["Miesięcy", c.urodzona ? String(L.monthsOld(c.urodzona, today)) : "—"]);
+  for (const [k, val] of items) { const w = el("div"); w.append(el("dt", null, k), el("dd", (k === "Do krycia" && bd && L.daysBetween(today, bd) <= 0) || k === "Termin porodu" ? "big" : null, val)); dl.append(w); }
   card.append(top, dl);
   withPhoto(top, c);
   const foot = el("div", "cowfoot");
@@ -662,14 +669,22 @@ function withPhoto(top, a) {
   card.style.setProperty("--photo", `url("${url}")`);
 }
 
+/** Zacielenie jałówki: zostaje w jałówkach, formularz z dzisiejszą datą. */
+function heiferInsem(c, date) {
+  openCalf(c);
+  $("cZacielenie").value = date; $("cByk").value = ""; $("cCielna").value = "";
+  updateCalfPreview();
+  status("Wpisz, jakim bykiem zacielona, i naciśnij Zapisz.");
+  setTimeout(() => $("cByk").focus(), 50);
+}
 /** Jałówka przechodzi do stada krów (np. po pierwszym zacieleniu). */
 function toHerd(c, preset) {
   if (cows.some((x) => x.kolczyk === c.kolczyk)) { status("Krowa z tym kolczykiem już jest w stadzie."); return; }
   const data = { kolczyk: c.kolczyk, nazwa: c.nazwa || "", miejsce: c.miejsce || "", ojciec: c.ojciec || "", urodzona: c.urodzona || "", matka: c.matka || "", foto: c.foto || 0,
-    wycielenie: "", ruja: "", zacielenie: "", byk: "", cielna: "", zasuszona: false, przegnana: false };
+    wycielenie: preset.wycielenie || "", ruja: "", zacielenie: c.zacielenie || "", byk: c.byk || "", cielna: c.cielna || "", zasuszona: false, przegnana: !!c.przegnana };
   writeCow(c.id, data);
   deleteAnimal("mlodziez", c, true);
-  status(`${c.kolczyk} przeniesiona do stada krów.`);
+  status(preset.wycielenie ? `${c.kolczyk}: wycielenie zapisane – teraz jest w stadzie krów.` : `${c.kolczyk} przeniesiona do stada krów.`);
   if (preset.zacielenie) { openCow({ id: c.id, ...data }, preset); setTimeout(() => $("byk").focus(), 50); status("Wpisz, jakim bykiem zacielona, i naciśnij Zapisz."); }
 }
 
@@ -1295,7 +1310,7 @@ function inseminate(q) {
   queueDoneId = q.id;
   const preset = { zacielenie: today, ruja: today, miejsce: q.miejsce || (a ? placeOf(a) : "") };
   if (a && cows.includes(a)) openCow(a, preset);
-  else if (a) { toHerd(a, { zacielenie: today, ruja: today }); }
+  else if (a) heiferInsem(a, today);
   else openCow(null, { ...preset, kolczyk: q.kolczyk });
   status("Wpisz, jakim bykiem zacielona, i naciśnij Zapisz.");
   setTimeout(() => $("byk").focus(), 60);
@@ -1398,6 +1413,14 @@ function updateCalfPreview() {
   $("cBreedBox").hidden = !j;
   const d = born && j ? L.addMonths(born, cfg.krycie) : null;
   $("cBreedOut").textContent = d ? L.fmt(d) : "—";
+  const jal = calfMode === "jalowka";
+  $("cInsBox").hidden = !jal;
+  const z = $("cZacielenie").value;
+  $("cBreedBox").hidden = !j || (jal && !!z);
+  const h = { zacielenie: z, cielna: $("cCielna").value };
+  $("cDueOut").textContent = L.fmt(L.due(h));
+  $("cCheckOut").textContent = L.fmt(L.checkDate(h, cfg));
+  $("cMoveOut").textContent = L.fmt(L.moveDate(h, cfg));
 }
 function openCalf(c, mode) {
   closeDialogs();
@@ -1407,6 +1430,7 @@ function openCalf(c, mode) {
   $("calfForm").reset(); $("cErr").hidden = true;
   $("cKolczyk").value = c?.kolczyk || ""; $("cNazwa").value = c?.nazwa || ""; $("cUrodzona").value = c?.urodzona || "";
   $("cMatka").value = c?.matka || ""; $("cOjciec").value = c?.ojciec || "";
+  $("cZacielenie").value = c?.zacielenie || ""; $("cByk").value = c?.byk || ""; $("cCielna").value = c?.cielna || "";
   (c?.plec === "b" ? $("cB") : $("cJ")).checked = true;
   placeSelect($("cMiejsce"), c ? placeOf(c) : currentPlace());
   photoUi("c", c ? photoFor(c) : null);
@@ -1425,7 +1449,8 @@ $("cWiek").addEventListener("input", () => {
   updateCalfPreview();
 });
 $("cUrodzona").addEventListener("input", () => { $("cWiek").value = ""; updateCalfPreview(); });
-["cJ", "cB"].forEach((id) => $(id).addEventListener("change", updateCalfPreview));
+["cJ", "cB", "cCielna"].forEach((id) => $(id).addEventListener("change", updateCalfPreview));
+$("cZacielenie").addEventListener("input", () => { $("cCielna").value = ""; updateCalfPreview(); });
 $("calfCancel").onclick = () => $("calfDlg").close();
 $("calfDlg").addEventListener("close", () => { calfEditId = null; });
 $("calfForm").addEventListener("submit", (e) => {
@@ -1441,6 +1466,14 @@ $("calfForm").addEventListener("submit", (e) => {
     kolczyk, nazwa: $("cNazwa").value.trim(), urodzona, typ: calfMode, plec: calfMode === "cielak" && $("cB").checked ? "b" : "j",
     miejsce: $("cMiejsce").value, matka: $("cMatka").value.trim().toUpperCase().replace(/\s+/g, ""), ojciec: $("cOjciec").value.trim(),
   };
+  const oldC = calves.find((x) => x.id === calfEditId);
+  if (calfMode === "jalowka") {
+    const z = $("cZacielenie").value;
+    if (z && z > L.todayISO()) return err("Data zacielenia nie może być z przyszłości.");
+    if (z && z < urodzona) return err("Data zacielenia jest przed urodzeniem.");
+    Object.assign(data, { zacielenie: z, byk: z ? $("cByk").value.trim() : "", cielna: z ? $("cCielna").value : "", przegnana: !!(oldC && oldC.zacielenie === z && oldC.przegnana) });
+  }
+  if (oldC) for (const k of ["ukryj"]) if (oldC[k]) data[k] = oldC[k];
   const kid = calfEditId || newId("c");
   data.foto = savePhoto("c", kid, calves.find((x) => x.id === calfEditId));
   writeCalf(kid, data);

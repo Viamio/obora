@@ -229,6 +229,20 @@
       <input id="cOjciec" autocomplete="off" list="bykList" placeholder="nazwa lub numer byka">
     </label>
     <div class="due" id="cBreedBox"><span>Gotowa do krycia<br>(<span id="cKrycieM">14</span> mies.)</span><b id="cBreedOut">—</b></div>
+    <div class="insbox" id="cInsBox" hidden>
+      <label for="cZacielenie">Data zacielenia <small>(inseminacja / krycie, opcjonalnie)</small>
+        <input id="cZacielenie" type="date">
+      </label>
+      <label for="cByk">Jakim bykiem zacielona <small>(nasienie / byk)</small>
+        <input id="cByk" autocomplete="off" list="bykList" placeholder="nazwa lub numer byka">
+      </label>
+      <label for="cCielna">Cielność
+        <select id="cCielna"><option value="">nie sprawdzono</option><option value="tak">cielna ✓</option><option value="nie">niecielna</option></select>
+      </label>
+      <div class="due"><span>Termin porodu<br>(+280 dni)</span><b id="cDueOut">—</b></div>
+      <div class="preview"><span>Sprawdzić cielność</span><b id="cCheckOut">—</b></div>
+      <div class="preview"><span>Przegnać na porodówkę</span><b id="cMoveOut">—</b></div>
+    </div>
     <p class="err" id="cErr" hidden></p>
     <div class="actions"><button type="submit" class="primary" id="cSave">Zapisz</button></div>
     <div class="abort" id="cAbortBox" hidden>

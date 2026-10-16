@@ -25,7 +25,7 @@ for (const ref of farms) {
   if (!FORCE) await ref.set({ ostatnio: today }, { merge: true });
 
   const calves = (await ref.collection("mlodziez").get()).docs.map((d) => ({ id: d.id, ...d.data() }));
-  const list = [...alerts(cows, cfg, 1, 7, today), ...calfAlerts(calves, cfg, 1, today)].sort((x, y) => (x.sort ?? x.n) - (y.sort ?? y.n));
+  const list = [...alerts(cows, cfg, 1, 7, today), ...calfAlerts(calves, cfg, 1, today, 7)].sort((x, y) => (x.sort ?? x.n) - (y.sort ?? y.n));
   if (!phones.length || (!list.length && !FORCE)) continue;
 
   const title = list.length ? `Obora: ${list.length} ${zadania(list.length)}` : "Obora: nic do zrobienia";
