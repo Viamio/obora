@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "3.0";
+export const APP_VERSION = "3.1";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -210,7 +210,7 @@ async function testNotif() {
   const list = allAlerts(cows, calves, 1, 7);
   const reg = swReg || (await navigator.serviceWorker.ready);
   await reg.showNotification(list.length ? `Obora: ${list.length} ${L.zadania(list.length)}` : "Obora: nic do zrobienia", {
-    body: list.slice(0, 6).map((a) => `${a.cow.kolczyk}: ${a.title} ${L.kiedy(a.n)}`).join("\n") || "Na dziś brak zadań.",
+    body: list.slice(0, 6).map((a) => `${a.cow.kolczyk}${a.cow.nazwa ? " (" + a.cow.nazwa + ")" : ""}: ${a.title} ${L.kiedy(a.n)}`).join("\n") || "Na dziś brak zadań.",
     icon: "ikona-192.png", badge: "odznaka-96.png", tag: "obora-test",
   });
   status("Wysłano – sprawdź pasek powiadomień.");
@@ -256,11 +256,17 @@ function sameTag(a, b) {
 const allAnimals = () => [...cows, ...calves];
 const tagOwner = (k, selfId) => allAnimals().find((a) => a.id !== selfId && sameTag(a.kolczyk, k)) || null;
 const animalKind = (a) => (cows.includes(a) ? "krowa" : typOf(a) === "jalowka" ? "jałówka" : a.plec === "b" ? "byczek" : "cielak");
-const animalDesc = (a) => animalKind(a) + (placeOf(a) ? " · " + placeOf(a) : "");
+const animalDesc = (a) => (a.nazwa ? a.nazwa + " · " : "") + animalKind(a) + (placeOf(a) ? " · " + placeOf(a) : "");
+/** Żółty kolczyk z nazwą krowy obok (jeśli wpisana). */
+function tagEl(a, k = a?.kolczyk) {
+  const t = el("span", "tag", k);
+  if (a?.nazwa) t.append(el("span", "tname", a.nazwa));
+  return t;
+}
 /** Pod polem kolczyka: lista sztuk o tym samym początku numeru; ten sam numer = czerwony błąd. */
 function tagAssist(input, { selfId = () => null, dupError = true, saveBtn = null, onPick = null } = {}) {
   const box = el("div", "tagsug"); box.hidden = true; box.setAttribute("aria-live", "polite");
-  (input.closest("label") || input).after(box);
+  (input.closest(".tagrow") || input.closest("label") || input).after(box);
   const setBad = (bad) => { input.classList.toggle("bad", bad); if (saveBtn) saveBtn.disabled = bad; };
   const refresh = () => {
     const v = tagNorm(input.value), d = tagDigits(v);
@@ -434,7 +440,7 @@ function renderSearch() {
   const box = $("searchRes"); if (!box) return;
   box.replaceChildren();
   const q = query.trim().toUpperCase();
-  const hit = (a) => !q || [a.kolczyk, a.ojciec, a.byk, a.matka, a.miejsce, a.antybiotyk].some((x) => (x || "").toUpperCase().includes(q));
+  const hit = (a) => !q || [a.kolczyk, a.nazwa, a.ojciec, a.byk, a.matka, a.miejsce, a.antybiotyk].some((x) => (x || "").toUpperCase().includes(q));
   const cs = sortCows(cows.filter(hit)), ks = sortCalves(calves.filter(hit));
   if (!loaded) { box.append(el("div", "empty", "Ładowanie stada…")); return; }
   if (!cs.length && !ks.length) { box.append(el("div", "empty", q ? "Nic nie znaleziono." : "Brak zwierząt. Dodaj pierwszą krowę przyciskiem na dole.")); return; }
@@ -505,7 +511,7 @@ function alertsSection(v, cs, ks, title = "Do zrobienia") {
     const ab = el("div", "abtns");
     const x = btn("✕", "ghost xclose", () => hideAlert(a));
     x.setAttribute("aria-label", "Ukryj to zadanie"); x.title = "Ukryj to zadanie";
-    const head = el("div", "ahead"); head.append(el("span", "tag", c.kolczyk), x);
+    const head = el("div", "ahead"); head.append(tagEl(c), x);
     row.append(head, t, ab);
     const zacielona = () => { openCow(c, { zacielenie: today, ruja: today }); status("Wpisz, jakim bykiem zacielona, i naciśnij Zapisz."); setTimeout(() => $("byk").focus(), 50); };
     if (a.kind === "check") ab.append(btn("Cielna", "okbtn", () => patch(c, { cielna: "tak" }, `${c.kolczyk}: cielna`)), btn("Niecielna", "nobtn", () => patch(c, { cielna: "nie" }, `${c.kolczyk}: niecielna`)));
@@ -548,7 +554,7 @@ function cowCard(c) {
   const card = el("article", "cow");
   const top = el("div", "cowtop");
   const left = el("div", "cowleft");
-  left.append(el("span", "tag", c.kolczyk));
+  left.append(tagEl(c));
   if (c.zasuszona) {
     const ch = el("span", "chip dry", c.antybiotyk ? `Zasuszona · ${c.antybiotyk}` : "Zasuszona");
     if (c.karencja) ch.append(" ", el("small", "dni", `(${c.karencja} dni)`));
@@ -615,7 +621,7 @@ function calfCard(c) {
   const card = el("article", "cow calf");
   const top = el("div", "cowtop");
   const left = el("div", "cowleft");
-  left.append(el("span", "tag", c.kolczyk), el("span", "chip " + (c.plec === "b" ? "" : "yes"), kindLabel(c)));
+  left.append(tagEl(c), el("span", "chip " + (c.plec === "b" ? "" : "yes"), kindLabel(c)));
   const age = el("span", "pill", L.ageText(c.urodzona, today));
   top.append(left, age);
   const dl = el("dl");
@@ -659,7 +665,7 @@ function withPhoto(top, a) {
 /** Jałówka przechodzi do stada krów (np. po pierwszym zacieleniu). */
 function toHerd(c, preset) {
   if (cows.some((x) => x.kolczyk === c.kolczyk)) { status("Krowa z tym kolczykiem już jest w stadzie."); return; }
-  const data = { kolczyk: c.kolczyk, miejsce: c.miejsce || "", ojciec: c.ojciec || "", urodzona: c.urodzona || "", matka: c.matka || "", foto: c.foto || 0,
+  const data = { kolczyk: c.kolczyk, nazwa: c.nazwa || "", miejsce: c.miejsce || "", ojciec: c.ojciec || "", urodzona: c.urodzona || "", matka: c.matka || "", foto: c.foto || 0,
     wycielenie: "", ruja: "", zacielenie: "", byk: "", cielna: "", zasuszona: false, przegnana: false };
   writeCow(c.id, data);
   deleteAnimal("mlodziez", c, true);
@@ -679,7 +685,7 @@ const DAY_MS = 24 * 3600 * 1000;
 let grp = null, undoing = false;
 /** Wszystkie zapisy z jednego stuknięcia trafiają do jednej grupy (cofane razem). */
 function group() { if (!grp) { grp = newId("g"); queueMicrotask(() => { grp = null; }); } return grp; }
-const LABELS = { kolczyk: "kolczyk", miejsce: "miejsce", ojciec: "ojciec", wycielenie: "wycielenie", ruja: "ruja", zacielenie: "zacielenie",
+const LABELS = { kolczyk: "kolczyk", nazwa: "nazwa", miejsce: "miejsce", ojciec: "ojciec", wycielenie: "wycielenie", ruja: "ruja", zacielenie: "zacielenie",
   byk: "byk", cielna: "cielność", zasuszona: "zasuszenie", zasuszonaData: "data zasuszenia", antybiotyk: "antybiotyk", karencja: "karencja",
   karencjaOk: "karencja", karencjaKoniec: "karencja", przegnana: "porodówka", foto: "zdjęcie", ukryj: "ukryte zadanie", wytrucie: "wytrucie",
   urodzona: "data urodzenia", plec: "płeć", typ: "typ", matka: "matka" };
@@ -910,7 +916,7 @@ function openCow(c, preset = {}) {
   editSeed = c;
   const v = { ...(c || {}), ...preset };
   $("form").reset(); $("err").hidden = true;
-  $("kolczyk").value = v.kolczyk || ""; $("wycielenie").value = v.wycielenie || ""; $("ruja").value = v.ruja || ""; $("zacielenie").value = v.zacielenie || "";
+  $("kolczyk").value = v.kolczyk || ""; $("nazwa").value = v.nazwa || ""; $("wycielenie").value = v.wycielenie || ""; $("ruja").value = v.ruja || ""; $("zacielenie").value = v.zacielenie || "";
   $("ojciec").value = v.ojciec || ""; $("antybiotyk").value = v.antybiotyk || "";
   $("karencja").value = v.karencja || ""; $("karencjaOd").value = v.karencjaOd || "zasuszenie";
   $("cielnaSel").value = c && !(preset.zacielenie && preset.zacielenie !== c.zacielenie) ? (c.cielna || "") : "";
@@ -944,7 +950,7 @@ $("form").addEventListener("submit", (e) => {
   const same = old && old.zacielenie === zacielenie;
   const data = {
     ...(old ? rowData(old) : {}),
-    kolczyk, miejsce, ojciec, wycielenie, ruja, zacielenie, byk: zacielenie ? byk : "",
+    kolczyk, nazwa: $("nazwa").value.trim(), miejsce, ojciec, wycielenie, ruja, zacielenie, byk: zacielenie ? byk : "",
     cielna: zacielenie ? $("cielnaSel").value : "",
     zasuszona: !!$("zasData").value || (same ? !!old.zasuszona : false) || !!antybiotyk,
     przegnana: same ? !!old.przegnana : false,
@@ -1070,7 +1076,7 @@ function viewQueue(v) {
       const on = inQ.has(a.kolczyk), preg = L.pregnant(a), jal = !cows.includes(a);
       const b = el("button", "qnum" + (on ? " on" : "") + (preg ? " preg" : "") + (jal ? " jal" : ""));
       b.type = "button";
-      b.append(el("span", null, a.kolczyk));
+      b.append(el("span", null, a.kolczyk)); if (a.nazwa) b.append(el("small", "qname", a.nazwa));
       if (on) b.append(el("small", null, "na liście ✓"));
       else if (preg) b.append(el("small", null, "cielna"));
       else if (jal) b.append(el("small", null, "jałówka"));
@@ -1125,7 +1131,7 @@ function viewQueue(v) {
       t.append(el("b", null, `${a.title} ${L.kiedy(a.n)}`), el("small", null, a.sub + (placeOf(a.cow) ? ` · ${placeOf(a.cow)}` : "")));
       const ab = el("div", "abtns");
       ab.append(btn("Dodaj do listy", "okbtn", () => setDoc(doc(queueCol(farm), newId("z")), { kolczyk: a.cow.kolczyk, miejsce: placeOf(a.cow), dodano: today, zmieniono: Date.now() })));
-      row.append(el("span", "tag", a.cow.kolczyk), t, ab);
+      row.append(tagEl(a.cow), t, ab);
       box.append(row);
     }
     sec.append(box); sugSec = sec;
@@ -1142,7 +1148,7 @@ function viewQueue(v) {
     const row = el("article", "cow qrow");
     const top = el("div", "cowtop");
     const left = el("div", "cowleft");
-    left.append(el("span", "tag", q.kolczyk));
+    left.append(tagEl(a, q.kolczyk));
     left.append(el("span", "chip", a ? (cows.includes(a) ? "Krowa" : kindLabel(a)) : "Spoza stada"));
     if (a && L.pregnant(a)) left.append(el("span", "chip no", "Uwaga: cielna"));
     top.append(left, el("span", "pill none", q.dodano ? `dodana ${L.fmt(q.dodano)}` : ""));
@@ -1264,7 +1270,7 @@ $("cAbortBtn").onclick = () => {
   if (!c) return;
   if (cows.some((x) => x.kolczyk === c.kolczyk)) { status("Krowa z tym kolczykiem już jest w stadzie."); return; }
   const today = L.todayISO();
-  writeCow(c.id, { kolczyk: c.kolczyk, miejsce: c.miejsce || "", ojciec: c.ojciec || "", urodzona: c.urodzona || "", matka: c.matka || "", foto: c.foto || 0,
+  writeCow(c.id, { kolczyk: c.kolczyk, nazwa: c.nazwa || "", miejsce: c.miejsce || "", ojciec: c.ojciec || "", urodzona: c.urodzona || "", matka: c.matka || "", foto: c.foto || 0,
     wycielenie: today, wytrucie: today, ruja: "", zacielenie: "", byk: "", cielna: "", zasuszona: false, przegnana: false });
   deleteAnimal("mlodziez", c, true);
   status(`${c.kolczyk}: wytrucie zapisane – przeniesiona do krów, terminy od dziś.`);
@@ -1285,7 +1291,7 @@ function openCalf(c, mode) {
   calfMode = c ? typOf(c) : mode;
   $("cSeg").hidden = calfMode !== "cielak";
   $("calfForm").reset(); $("cErr").hidden = true;
-  $("cKolczyk").value = c?.kolczyk || ""; $("cUrodzona").value = c?.urodzona || "";
+  $("cKolczyk").value = c?.kolczyk || ""; $("cNazwa").value = c?.nazwa || ""; $("cUrodzona").value = c?.urodzona || "";
   $("cMatka").value = c?.matka || ""; $("cOjciec").value = c?.ojciec || "";
   (c?.plec === "b" ? $("cB") : $("cJ")).checked = true;
   placeSelect($("cMiejsce"), c ? placeOf(c) : currentPlace());
@@ -1318,7 +1324,7 @@ $("calfForm").addEventListener("submit", (e) => {
   if (urodzona > L.todayISO()) return err("Data urodzenia nie może być z przyszłości.");
   { const own = tagOwner(kolczyk, calfEditId); if (own) return err(`Ten kolczyk już jest: ${own.kolczyk} (${animalDesc(own)}).`); }
   const data = {
-    kolczyk, urodzona, typ: calfMode, plec: calfMode === "cielak" && $("cB").checked ? "b" : "j",
+    kolczyk, nazwa: $("cNazwa").value.trim(), urodzona, typ: calfMode, plec: calfMode === "cielak" && $("cB").checked ? "b" : "j",
     miejsce: $("cMiejsce").value, matka: $("cMatka").value.trim().toUpperCase().replace(/\s+/g, ""), ojciec: $("cOjciec").value.trim(),
   };
   const kid = calfEditId || newId("c");

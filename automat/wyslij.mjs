@@ -29,7 +29,7 @@ for (const ref of farms) {
   if (!phones.length || (!list.length && !FORCE)) continue;
 
   const title = list.length ? `Obora: ${list.length} ${zadania(list.length)}` : "Obora: nic do zrobienia";
-  let body = list.slice(0, 6).map((a) => `${a.cow.kolczyk}: ${a.title} ${kiedy(a.n)}`).join("\n") || "Na dziś brak zadań.";
+  let body = list.slice(0, 6).map((a) => `${a.cow.kolczyk}${a.cow.nazwa ? " (" + a.cow.nazwa + ")" : ""}: ${a.title} ${kiedy(a.n)}`).join("\n") || "Na dziś brak zadań.";
   if (list.length > 6) body += `\n…i jeszcze ${list.length - 6}`;
 
   const res = await admin.messaging().sendEachForMulticast({

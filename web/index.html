@@ -79,9 +79,14 @@
 <dialog class="sheet" id="cowDlg" aria-labelledby="formTitle">
   <form id="form" novalidate>
     <div class="sheethead"><h2 id="formTitle">Dodaj krowę</h2><button type="button" class="ghost x" id="cancelBtn" aria-label="Zamknij">✕</button></div>
-    <label for="kolczyk">Numer kolczyka
-      <input id="kolczyk" autocomplete="off" inputmode="numeric" enterkeyhint="next" placeholder="np. 005123456789">
-    </label>
+    <div class="tagrow">
+      <label for="kolczyk">Numer kolczyka
+        <input id="kolczyk" autocomplete="off" inputmode="numeric" enterkeyhint="next" placeholder="np. 005123456789">
+      </label>
+      <label for="nazwa">Nazwa <small>(opcjonalnie)</small>
+        <input id="nazwa" autocomplete="off" autocapitalize="words" enterkeyhint="next" maxlength="30" placeholder="np. Mućka">
+      </label>
+    </div>
     <div class="photo">
       <div class="phprev" id="kPhPrev" hidden></div>
       <div class="row">
@@ -184,9 +189,14 @@
 <dialog class="sheet" id="calfDlg" aria-labelledby="calfTitle">
   <form id="calfForm" novalidate>
     <div class="sheethead"><h2 id="calfTitle">Dodaj cielę / jałówkę</h2><button type="button" class="ghost x" id="calfCancel" aria-label="Zamknij">✕</button></div>
-    <label for="cKolczyk">Numer kolczyka
-      <input id="cKolczyk" autocomplete="off" inputmode="numeric" enterkeyhint="next" placeholder="np. 005123456789">
-    </label>
+    <div class="tagrow">
+      <label for="cKolczyk">Numer kolczyka
+        <input id="cKolczyk" autocomplete="off" inputmode="numeric" enterkeyhint="next" placeholder="np. 005123456789">
+      </label>
+      <label for="cNazwa">Nazwa <small>(opcjonalnie)</small>
+        <input id="cNazwa" autocomplete="off" autocapitalize="words" enterkeyhint="next" maxlength="30" placeholder="np. Mućka">
+      </label>
+    </div>
     <div class="photo">
       <div class="phprev" id="cPhPrev" hidden></div>
       <div class="row">
