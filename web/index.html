@@ -161,10 +161,33 @@
       <button type="button" class="ghost danger" id="abortBtn">Wytrucie</button>
       <small id="abortHint">Krowa będzie niecielna, a terminy liczą się od nowa – jak po wycieleniu.</small>
     </div>
+    <div class="sellbox" id="kSellBox" hidden>
+      <button type="button" class="ghost" id="kSellBtn">Sprzedana…</button>
+      <button type="button" class="ghost" id="kToSellBtn">Do sprzedania</button>
+      <small>„Sprzedana” – wpiszesz kwotę, sztuka zniknie ze stada i trafi do zakładki „Do sprzedania”.</small>
+    </div>
   </form>
 </dialog>
 
 <!-- Zasuszenie: jakim antybiotykiem -->
+<dialog class="sheet" id="sellDlg" aria-labelledby="sellTitle">
+  <form id="sellForm" novalidate>
+    <div class="sheethead"><h2 id="sellTitle">Sprzedana</h2><button type="button" class="ghost x" id="sellCancel" aria-label="Zamknij">✕</button></div>
+    <p class="hint" id="sellWho"></p>
+    <label for="sellPrice">Za ile poszła
+      <span class="numrow"><input id="sellPrice" inputmode="decimal" autocomplete="off" placeholder="np. 6500"><span>zł</span></span>
+    </label>
+    <label for="sellDate">Data sprzedaży
+      <input id="sellDate" type="date">
+    </label>
+    <label for="sellNote">Komu / uwagi <small>(opcjonalnie)</small>
+      <input id="sellNote" autocomplete="off" placeholder="np. handlarz, rzeźnia, waga 650 kg">
+    </label>
+    <p class="err" id="sellErr" hidden></p>
+    <div class="actions"><button type="submit" class="primary" id="sellSave">Zapisz sprzedaż</button></div>
+  </form>
+</dialog>
+
 <dialog class="sheet" id="dryDlg" aria-labelledby="dryTitle">
   <form id="dryForm" novalidate>
     <div class="sheethead"><h2 id="dryTitle">Zasuszenie</h2><button type="button" class="ghost x" id="dryCancel" aria-label="Zamknij">✕</button></div>
@@ -265,6 +288,11 @@
     <div class="abort" id="cAbortBox" hidden>
       <button type="button" class="ghost danger" id="cAbortBtn">Wytrucie</button>
       <small id="cAbortHint">Jałówka przejdzie do krów jak po wycieleniu – terminy liczą się od dziś.</small>
+    </div>
+    <div class="sellbox" id="cSellBox" hidden>
+      <button type="button" class="ghost" id="cSellBtn">Sprzedana…</button>
+      <button type="button" class="ghost" id="cToSellBtn">Do sprzedania</button>
+      <small>„Sprzedana” – wpiszesz kwotę, sztuka zniknie ze stada i trafi do zakładki „Do sprzedania”.</small>
     </div>
   </form>
 </dialog>

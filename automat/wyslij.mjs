@@ -20,7 +20,7 @@ for (const ref of farms) {
   const cfg = cfgOf((await ref.collection("ustawienia").doc("glowne").get()).data());
   if (!FORCE && (hourNow < cfg.hour || farm.ostatnio === today)) continue;
 
-  const cows = (await ref.collection("krowy").get()).docs.map((d) => ({ id: d.id, ...d.data() }));
+  const cows = (await ref.collection("krowy").get()).docs.map((d) => ({ id: d.id, ...d.data() })).filter((c) => !c.sprzedana);
   // krowy w rui i niecielne → same trafiają na listę „Do zacielenia”
   const queue = (await ref.collection("dozacielenia").get()).docs.map((d) => d.data().kolczyk);
   for (const { cow: c, date } of rujaQueue(cows, today)) {
@@ -33,7 +33,7 @@ for (const ref of farms) {
   const phones = (await ref.collection("telefony").get()).docs.filter((p) => p.data().token);
   if (!FORCE) await ref.set({ ostatnio: today }, { merge: true });
 
-  const calves = (await ref.collection("mlodziez").get()).docs.map((d) => ({ id: d.id, ...d.data() }));
+  const calves = (await ref.collection("mlodziez").get()).docs.map((d) => ({ id: d.id, ...d.data() })).filter((c) => !c.sprzedana);
   const list = [...alerts(cows, cfg, 1, 7, today), ...calfAlerts(calves, cfg, 1, today, 7)].sort((x, y) => (x.sort ?? x.n) - (y.sort ?? y.n));
   if (!phones.length || (!list.length && !FORCE)) continue;
 

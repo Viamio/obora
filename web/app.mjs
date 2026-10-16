@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "3.6";
+export const APP_VERSION = "3.7";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -81,6 +81,7 @@ const newId = (p) => p + Date.now().toString(36) + Math.random().toString(36).sl
 // ---------------- stan ----------------
 let farm = LS.get("obora_farm");
 let cows = [], calves = [], queue = [], history = [];
+let soldCows = [], soldCalves = [];   // sprzedane: zostają w bazie z polem „sprzedana”, poza stadem
 let queueLoaded = false;
 const autoDone = new Set();
 /** Krowa biega (ruja) i jest niecielna → sama trafia na listę „Do zacielenia”. Zacielone znikają z listy. */
@@ -155,7 +156,8 @@ function start(code) {
   $("setup").hidden = true; $("app").hidden = false; $("fab").hidden = false;
   unsub.forEach((u) => u()); unsub = [];
   unsub.push(onSnapshot(cowsCol(code), (snap) => {
-    cows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    cows = all.filter((c) => !c.sprzedana); soldCows = all.filter((c) => c.sprzedana);
     loaded = true;
     autoQueue();
     const off = "Bez internetu – zmiany wyślą się później.";
@@ -174,7 +176,8 @@ function start(code) {
     render();
   }, () => {}));
   unsub.push(onSnapshot(calvesCol(code), (snap) => {
-    calves = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const all = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    calves = all.filter((c) => !c.sprzedana); soldCalves = all.filter((c) => c.sprzedana);
     render();
   }, () => {}));
   unsub.push(onSnapshot(cfgDocRef(code), (s) => {
@@ -346,6 +349,7 @@ function tabList() {
   if (none && places().length) t.push({ key: "m:" + NO_PLACE, label: "Bez miejsca", n: none });
   t.push({ key: "cielaki", label: "Cielaki", n: calves.filter((c) => typOf(c) === "cielak").length });
   t.push({ key: "jalowki", label: "Jałówki", n: calves.filter((c) => typOf(c) === "jalowka").length });
+  t.push({ key: "sprzedaz", label: "Do sprzedania", n: [...cows, ...calves].filter((a) => a.doSprzedania).length });
   t.push({ key: "ustawienia", label: "Ustawienia" });
   return t;
 }
@@ -402,9 +406,10 @@ function render(dir = 0) {
   else if (tab === "zacielenie") viewQueue(v);
   else if (tab === "cielaki" || tab === "jalowki") viewCalves(v, tab === "cielaki" ? "cielak" : "jalowka");
   else if (tab === "ustawienia") viewSettings(v);
+  else if (tab === "sprzedaz") viewSales(v);
   else viewPlace(v, tab.slice(2));
   $("fab").textContent = tab === "cielaki" ? "+ Dodaj cielaka" : tab === "jalowki" ? "+ Dodaj jałówkę" : "+ Dodaj";
-  $("fab").hidden = tab === "ustawienia" || tab === "zacielenie";
+  $("fab").hidden = tab === "ustawienia" || tab === "zacielenie" || tab === "sprzedaz";
   if (dir) { v.classList.remove("in-l", "in-r"); void v.offsetWidth; v.classList.add(dir > 0 ? "in-r" : "in-l"); }
 }
 
@@ -744,7 +749,7 @@ const DAY_MS = 24 * 3600 * 1000;
 let grp = null, undoing = false;
 /** Wszystkie zapisy z jednego stuknięcia trafiają do jednej grupy (cofane razem). */
 function group() { if (!grp) { grp = newId("g"); queueMicrotask(() => { grp = null; }); } return grp; }
-const LABELS = { kolczyk: "kolczyk", nazwa: "nazwa", zacielenie2: "2. zacielenie", byk2: "2. byk", miejsce: "miejsce", ojciec: "ojciec", wycielenie: "wycielenie", ruja: "ruja", zacielenie: "zacielenie",
+const LABELS = { kolczyk: "kolczyk", nazwa: "nazwa", sprzedana: "sprzedaż", doSprzedania: "do sprzedania", zacielenie2: "2. zacielenie", byk2: "2. byk", miejsce: "miejsce", ojciec: "ojciec", wycielenie: "wycielenie", ruja: "ruja", zacielenie: "zacielenie",
   byk: "byk", cielna: "cielność", zasuszona: "zasuszenie", zasuszonaData: "data zasuszenia", antybiotyk: "antybiotyk", karencja: "karencja",
   karencjaOk: "karencja", karencjaKoniec: "karencja", przegnana: "porodówka", foto: "zdjęcie", ukryj: "ukryte zadanie", wytrucie: "wytrucie",
   urodzona: "data urodzenia", plec: "płeć", typ: "typ", matka: "matka" };
@@ -957,7 +962,7 @@ function fillLists() {
 }
 
 // ---------------- formularz krowy ----------------
-function closeDialogs() { for (const id of ["cowDlg", "calfDlg", "pickDlg", "dryDlg"]) { const d = $(id); if (d.open) d.close(); } }
+function closeDialogs() { for (const id of ["cowDlg", "calfDlg", "pickDlg", "dryDlg", "sellDlg"]) { const d = $(id); if (d.open) d.close(); } }
 function currentPlace() { return tab.startsWith("m:") && tab !== "m:" + NO_PLACE ? tab.slice(2) : ""; }
 function updatePreview() {
   const z = $("zacielenie").value, r = $("ruja").value;
@@ -999,6 +1004,7 @@ function openCow(c, preset = {}) {
   $("saveBtn").textContent = c ? "Zapisz zmiany" : "Zapisz krowę";
   armAbort("abortBtn", "abortHint", "Krowa będzie niecielna, a terminy liczą się od nowa – jak po wycieleniu.");
   $("abortBox").hidden = !c;
+  sellUi("k", c, "krowy");
   cowTag.reset(); if (!c && v.kolczyk) cowTag.refresh();
   $("cowDlg").showModal();
   if (!c) $("kolczyk").focus();
@@ -1088,8 +1094,8 @@ async function exportBackup(photos, b) {
     const data = {
       rodzaj: BACKUP_KIND, wersja: 1, aplikacja: APP_VERSION, zapisano: new Date().toISOString(), gospodarstwo: farm,
       ustawienia: cfg,
-      krowy: cows.map((c) => ({ id: c.id, ...rowData(c) })),
-      mlodziez: calves.map((c) => ({ id: c.id, ...rowData(c) })),
+      krowy: [...cows, ...soldCows].map((c) => ({ id: c.id, ...rowData(c) })),
+      mlodziez: [...calves, ...soldCalves].map((c) => ({ id: c.id, ...rowData(c) })),
       dozacielenia: queue.map((q) => ({ id: q.id, ...rowData(q) })),
       zdjecia,
     };
@@ -1436,6 +1442,94 @@ function updateMotherInfo() {
   if (p?.skip) $("cMotherInfo").textContent += " " + p.skip;
   else if (p) $("cMotherChkT").textContent = p.heifer ? `Wpisz jej wycielenie ${L.fmt(date)} i przenieś do krów` : `Wpisz matce wycielenie ${L.fmt(date)}` + (p.onlyDate ? "" : " (terminy od nowa)");
 }
+// ---------------- sprzedaż ----------------
+const zl = (n) => { n = Number(n) || 0; const f = Number.isInteger(n) ? 0 : 2; return n.toLocaleString("pl-PL", { minimumFractionDigits: f, maximumFractionDigits: f, useGrouping: "always" }) + " zł"; };
+const writeAny = (kol, a, ch) => (kol === "krowy" ? writeCow : writeCalf)(a.id, { ...rowData(a), ...ch });
+let sellTarget = null;
+function sellUi(pre, a, kol) {
+  $(pre + "SellBox").hidden = !a;
+  if (!a) return;
+  $(pre + "SellBtn").onclick = () => openSell(a, kol);
+  $(pre + "ToSellBtn").textContent = a.doSprzedania ? "Usuń z „Do sprzedania”" : "Do sprzedania";
+  $(pre + "ToSellBtn").onclick = () => {
+    writeAny(kol, a, { doSprzedania: !a.doSprzedania });
+    status(a.doSprzedania ? `${a.kolczyk} usunięta z listy do sprzedania.` : `${a.kolczyk} dodana do zakładki „Do sprzedania”.`);
+    closeDialogs();
+  };
+}
+function openSell(a, kol) {
+  closeDialogs();
+  sellTarget = { a, kol };
+  $("sellWho").textContent = `${a.kolczyk}${a.nazwa ? " " + a.nazwa : ""} – ${animalDesc(a)}`;
+  $("sellPrice").value = a.sprzedana?.cena ?? ""; $("sellDate").value = a.sprzedana?.data || L.todayISO(); $("sellNote").value = a.sprzedana?.uwagi || "";
+  $("sellErr").hidden = true;
+  $("sellDlg").showModal();
+  setTimeout(() => $("sellPrice").focus(), 50);
+}
+$("sellCancel").onclick = () => $("sellDlg").close();
+$("sellForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const raw = $("sellPrice").value.replace(/\s|zł/gi, "").replace(",", ".");
+  const cena = raw === "" ? NaN : Number(raw);
+  const err = (t) => { $("sellErr").textContent = t; $("sellErr").hidden = false; };
+  if (!Number.isFinite(cena) || cena < 0) return err("Wpisz kwotę, np. 6500.");
+  const data = $("sellDate").value || L.todayISO();
+  if (data > L.todayISO()) return err("Data sprzedaży nie może być z przyszłości.");
+  const { a, kol } = sellTarget;
+  writeAny(kol, a, { sprzedana: { cena, data, uwagi: $("sellNote").value.trim() }, doSprzedania: false });
+  // sprzedana sztuka znika z listy „Do zacielenia”
+  queue.filter((q) => sameTag(q.kolczyk, a.kolczyk)).forEach((q) => deleteDoc(doc(queueCol(farm), q.id)).catch(() => {}));
+  $("sellDlg").close();
+  status(`${a.kolczyk} sprzedana za ${zl(cena)}. Jest w zakładce „Do sprzedania”.`);
+});
+const kindOfAny = (a) => (soldCows.includes(a) || cows.includes(a) ? "krowa" : typOf(a) === "jalowka" ? "jałówka" : a.plec === "b" ? "byczek" : "cielę");
+function viewSales(v) {
+  const head = el("div", "placehead");
+  head.append(el("h2", null, "Do sprzedania"));
+  v.append(head);
+  // --- czekają na sprzedaż ---
+  const wait = [...cows.map((a) => [a, "krowy"]), ...calves.map((a) => [a, "mlodziez"])].filter(([a]) => a.doSprzedania);
+  const s1 = el("section", "sales");
+  s1.append(el("h3", "subh", `Czekają na sprzedaż (${wait.length})`));
+  if (!wait.length) s1.append(el("div", "empty", "Nic nie czeka. Sztukę dodasz w Edytuj → na dole „Do sprzedania”."));
+  for (const [a, kol] of wait) {
+    const row = el("div", "salerow");
+    const info = el("div", "sinfo"); info.append(tagEl(a), el("small", null, kindOfAny(a) + (placeOf(a) ? " · " + placeOf(a) : "")));
+    const b = el("div", "abtns");
+    b.append(btn("Sprzedana…", "okbtn", () => openSell(a, kol)), btn("✕", "ghost xclose", () => { writeAny(kol, a, { doSprzedania: false }); status(`${a.kolczyk} usunięta z listy.`); }));
+    row.append(info, b); s1.append(row);
+  }
+  v.append(s1);
+  // --- sprzedane ---
+  const sold = [...soldCows.map((a) => [a, "krowy"]), ...soldCalves.map((a) => [a, "mlodziez"])]
+    .sort(([x], [y]) => (y.sprzedana.data || "").localeCompare(x.sprzedana.data || ""));
+  const sum = sold.reduce((s, [a]) => s + (Number(a.sprzedana.cena) || 0), 0);
+  const year = L.todayISO().slice(0, 4);
+  const sumY = sold.filter(([a]) => (a.sprzedana.data || "").startsWith(year)).reduce((s, [a]) => s + (Number(a.sprzedana.cena) || 0), 0);
+  const s2 = el("section", "sales");
+  s2.append(el("h3", "subh", `Sprzedane (${sold.length})`));
+  const tot = el("div", "saletotal");
+  const t1 = el("div"); t1.append(el("span", null, "Razem"), el("b", null, zl(sum)));
+  const t2 = el("div"); t2.append(el("span", null, `W ${year} r.`), el("b", null, zl(sumY)));
+  tot.append(t1, t2); s2.append(tot);
+  if (!sold.length) s2.append(el("div", "empty", "Jeszcze nic nie sprzedano. W Edytuj → na dole „Sprzedana…” wpiszesz kwotę."));
+  for (const [a, kol] of sold) {
+    const row = el("div", "salerow sold");
+    const info = el("div", "sinfo");
+    info.append(tagEl(a), el("small", null, `${kindOfAny(a)} · ${L.fmt(a.sprzedana.data)}${a.sprzedana.uwagi ? " · " + a.sprzedana.uwagi : ""}`));
+    const right = el("div", "sright");
+    right.append(el("b", "price", zl(a.sprzedana.cena)));
+    const acts = el("div", "abtns");
+    acts.append(btn("Zmień", "ghost sm", () => openSell(a, kol)));
+    const undo = btn("Cofnij", "ghost sm", () => {
+      if (!undo.dataset.armed) { undo.dataset.armed = "1"; undo.textContent = "Wraca do stada?"; undo.classList.add("del"); return; }
+      writeAny(kol, a, { sprzedana: null }); status(`${a.kolczyk} wróciła do stada.`);
+    });
+    acts.append(undo); right.append(acts);
+    row.append(info, right); s2.append(row);
+  }
+  v.append(s2);
+}
 function calved(c, date) {
   const ch = calvingChanges(c, date);
   const n = ch.karencjaKoniec ? L.daysBetween(L.todayISO(), ch.karencjaKoniec) : 0;
@@ -1533,6 +1627,7 @@ function openCalf(c, mode) {
   $("calfTitle").textContent = (c ? "Edytuj " : "Dodaj ") + (calfMode === "cielak" ? "cielaka" : "jałówkę");
   armAbort("cAbortBtn", "cAbortHint", "Jałówka przejdzie do krów jak po wycieleniu – terminy liczą się od dziś.");
   $("cAbortBox").hidden = !(c && calfMode === "jalowka");
+  sellUi("c", c, "mlodziez");
   updateCalfPreview();
   delete $("cOjciec").dataset.auto;
   $("cMotherChk").checked = true; updateMotherInfo();

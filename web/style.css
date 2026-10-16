@@ -276,3 +276,18 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .z2 summary small{font-weight:400;color:var(--muted)}
 .z2body{display:flex;flex-direction:column;gap:12px;margin-top:12px}
 .z2body .hint{margin:0}
+/* Sprzedaż */
+.sellbox{display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-top:1px dashed var(--line);padding-top:12px}
+.sellbox small{flex-basis:100%;color:var(--muted);font-size:.82rem}
+.sales{display:flex;flex-direction:column;gap:8px}
+.salerow{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.salerow .sinfo{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0}
+.salerow .sinfo small{color:var(--muted);font-size:.82rem;overflow-wrap:anywhere}
+.salerow .sright{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
+.salerow .price{font-family:var(--display);font-size:1.35rem;font-variant-numeric:tabular-nums;color:var(--accent)}
+.salerow .tag{font-size:1.05rem}
+.saletotal{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.saletotal>div{background:var(--ok-bg);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column}
+.saletotal span{font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.saletotal b{font-family:var(--display);font-size:1.4rem;white-space:nowrap;line-height:1.1;font-variant-numeric:tabular-nums}
+.abtns .sm{min-height:36px;padding:4px 10px;font-size:.85rem}
