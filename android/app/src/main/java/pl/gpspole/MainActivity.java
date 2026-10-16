@@ -25,8 +25,8 @@ import java.util.Locale;
 
 public class MainActivity extends Activity {
     private static final String START_URL = "https://appassets.androidplatform.net/assets/index.html";
-    /** GPS module read interval: 333 ms = 3 fixes per second. */
-    private static final long GPS_INTERVAL_MS = 333L;
+    /** GPS module read interval: 33 ms = up to 30 fixes per second (the chip delivers what it can). */
+    private static final long GPS_INTERVAL_MS = 33L;
 
     private WebView web;
     private GeolocationPermissions.Callback pendingCallback;

@@ -6,9 +6,7 @@
 <meta name="theme-color" content="#0e130f">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
 <title>Prowadzenie GPS</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
 <style>
@@ -21,10 +19,10 @@
   color-scheme:dark;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);overflow:hidden;overscroll-behavior:none}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);overflow:hidden;overscroll-behavior:none;-webkit-user-select:none;user-select:none}
 [hidden]{display:none!important}
 button{font:inherit;color:inherit;cursor:pointer}
-button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 #map{position:fixed;inset:0;width:100%;height:100%;touch-action:none;display:block}
 
 .top{position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 8px) max(10px,env(safe-area-inset-right,0px)) 8px max(10px,env(safe-area-inset-left,0px));
@@ -39,49 +37,78 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 .stat{background:rgba(22,29,23,.88);border:1px solid var(--line);border-radius:8px;padding:5px 8px;min-width:0}
 .stat b{display:block;font-family:var(--display);font-size:24px;font-weight:700;line-height:1.05;font-variant-numeric:tabular-nums;white-space:nowrap}
-.stat span{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.stat span{display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .stat.warn b{color:var(--overlap)}
 .stat .ok{color:var(--spray)}
 
 .side{position:fixed;right:max(10px,env(safe-area-inset-right,0px));top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:8px}
-.icon{width:52px;height:52px;border-radius:12px;background:rgba(22,29,23,.92);border:1px solid var(--line);font-family:var(--display);font-size:24px;font-weight:700;display:grid;place-items:center}
+.icon{position:relative;width:52px;height:52px;border-radius:12px;background:rgba(22,29,23,.92);border:1px solid var(--line);font-family:var(--display);font-size:24px;font-weight:700;display:grid;place-items:center;flex:none}
 .icon.active{border-color:var(--amber);color:var(--amber)}
+.icon.badge::after{content:"";position:absolute;top:7px;right:7px;width:11px;height:11px;border-radius:50%;background:var(--overlap);box-shadow:0 0 0 2px var(--panel)}
 
 .bottom{position:fixed;left:0;right:0;bottom:0;padding:10px max(10px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 10px) max(10px,env(safe-area-inset-left,0px));
-  display:grid;grid-template-columns:1fr 1.6fr 1fr;gap:8px;background:linear-gradient(transparent,var(--bg) 30%)}
-.btn{min-height:64px;border-radius:14px;border:1px solid var(--line);background:var(--panel);font-family:var(--display);font-weight:700;font-size:20px;letter-spacing:.04em;text-transform:uppercase;padding:6px}
-.btn small{display:block;font-family:var(--body);font-size:11px;font-weight:500;letter-spacing:.06em;color:var(--muted);text-transform:none}
-#spray{font-size:26px;background:#2b2216;border-color:#5a4520;color:var(--amber)}
+  display:flex;flex-direction:column;gap:8px;background:linear-gradient(transparent,var(--bg) 30%)}
+.mainbtns{display:grid;grid-template-columns:1fr 1.5fr 1.1fr;gap:8px}
+.btn{min-height:64px;border-radius:14px;border:1px solid var(--line);background:var(--panel);font-family:var(--display);font-weight:700;font-size:20px;letter-spacing:.04em;text-transform:uppercase;padding:6px;min-width:0}
+.btn small{display:block;font-family:var(--body);font-size:11px;font-weight:500;letter-spacing:.04em;color:var(--muted);text-transform:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#spray{font-size:23px;white-space:nowrap;background:#2b2216;border-color:#5a4520;color:var(--amber)}
 #spray.on{background:var(--spray);border-color:var(--spray);color:#0b1a0b}
 #spray.on small{color:#1d3a1d}
 #ab.set{border-color:var(--amber);color:var(--amber)}
+#toolBtn{font-size:17px;line-height:1.1}
+#toolBtn .tn{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* demo driving pad */
+.pad{display:grid;grid-template-columns:repeat(4,1fr) 1.3fr;gap:8px;align-items:stretch}
+.pad button{min-height:58px;border-radius:14px;border:1px solid #5a4520;background:#221b10;color:var(--amber);font-size:26px;font-weight:700;touch-action:none}
+.pad button.held{background:var(--amber);color:#1b1404}
+.pad .exit{font-family:var(--display);font-size:16px;letter-spacing:.04em;text-transform:uppercase;color:var(--fg);border-color:var(--line);background:var(--panel)}
+.demoTag{position:fixed;left:max(10px,env(safe-area-inset-left,0px));top:50%;transform:translateY(-50%);background:#221b10;border:1px solid #5a4520;color:var(--amber);font-family:var(--display);font-weight:700;letter-spacing:.12em;padding:6px 10px;border-radius:8px;font-size:14px}
 
 .sheet{position:fixed;inset:0;background:rgba(5,8,5,.6);display:flex;align-items:flex-end;justify-content:center}
 .sheet-in{width:100%;max-width:520px;background:var(--panel);border-top:1px solid var(--line);border-radius:18px 18px 0 0;
   padding:18px max(18px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 18px) max(18px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:14px;max-height:92%;overflow:auto}
+.sheet-in>*{flex-shrink:0}
 .sheet h2{font-family:var(--display);font-size:28px;margin:0;letter-spacing:.02em;text-wrap:balance}
+.sheet h3{font-family:var(--display);font-size:18px;margin:0;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.row>label,.row>div:first-child{min-width:0}
 .row label{font-weight:500}
-.width{display:flex;align-items:center;gap:6px}
-.width input{width:90px;height:52px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font-family:var(--display);font-size:28px;font-weight:700;text-align:center}
-.width button{width:52px;height:52px;border-radius:10px;border:1px solid var(--line);background:var(--bg);font-size:26px;font-weight:700}
+.num{display:flex;align-items:center;gap:6px;flex:none}
+.num input{width:82px;height:50px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font-family:var(--display);font-size:26px;font-weight:700;text-align:center}
+.num button{width:50px;height:50px;border-radius:10px;border:1px solid var(--line);background:var(--bg);font-size:26px;font-weight:700}
+.field{display:flex;flex-direction:column;gap:6px}
+.field input[type=text],.field select{height:50px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font-size:17px;padding:0 12px;width:100%}
 .seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:10px;overflow:hidden}
-.seg button{border:0;background:var(--bg);padding:12px 8px;font-weight:600;font-size:14px}
+.seg button{border:0;background:var(--bg);padding:12px 8px;font-weight:600;font-size:15px}
 .seg button.sel{background:var(--amber);color:#1b1404}
 .wide{width:100%}
 .danger{border-color:#6b2c1c;color:var(--overlap)}
 .note{font-size:13px;color:var(--muted);line-height:1.5;margin:0}
 .start .btn{width:100%}
-.start .primary{background:var(--amber);border-color:var(--amber);color:#1b1404}
+.primary{background:var(--amber)!important;border-color:var(--amber)!important;color:#1b1404!important}
+.primary small{color:#4a3a10!important}
+
+.tools{display:flex;flex-direction:column;gap:8px}
+.tool{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:10px 10px 10px 14px;background:var(--bg)}
+.tool.sel{border-color:var(--amber);box-shadow:inset 4px 0 0 var(--amber)}
+.tool .pick{flex:1;min-width:0;text-align:left;background:none;border:0;padding:0}
+.tool .pick b{display:block;font-family:var(--display);font-size:21px;letter-spacing:.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tool .pick span{font-size:13px;color:var(--muted)}
+.tool .edit{height:44px;padding:0 14px;border-radius:10px;border:1px solid var(--line);background:var(--panel);font-weight:600;font-size:14px}
+.curTool{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.curTool b{display:block;font-family:var(--display);font-size:21px}
+.curTool span{font-size:13px;color:var(--muted)}
+.curTool button{height:46px;padding:0 16px;border-radius:10px;border:1px solid var(--line);background:var(--bg);font-weight:600}
+.scheme{width:100%;height:auto;aspect-ratio:340/92;max-width:100%;display:block;background:var(--bg);border-radius:10px}
+
 .upd{display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:12px;padding:12px}
 .upd .row b{font-family:var(--display);font-size:20px;letter-spacing:.02em}
 .upd .row .btn{min-height:48px;padding:6px 14px;font-size:17px;letter-spacing:.01em;flex:none;white-space:nowrap}
 .upd .row .btn.go{background:var(--amber);border-color:var(--amber);color:#1b1404}
 .bar{height:8px;border-radius:4px;background:var(--bg);overflow:hidden}
 .bar i{display:block;height:100%;width:0;background:var(--amber);transition:width .2s}
-.icon{position:relative}
-.icon.badge::after{content:"";position:absolute;top:7px;right:7px;width:11px;height:11px;border-radius:50%;background:var(--overlap);box-shadow:0 0 0 2px var(--panel)}
-.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 96px);transform:translateX(-50%);background:#000c;border:1px solid var(--line);padding:10px 16px;border-radius:999px;font-size:14px;max-width:90%;text-align:center}
+.toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 120px);transform:translateX(-50%);background:#000d;border:1px solid var(--line);padding:10px 16px;border-radius:14px;font-size:14px;max-width:90%;text-align:center;z-index:20}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -89,13 +116,13 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 <canvas id="map"></canvas>
 
 <div class="top">
-  <div class="lightbar" id="lightbar">
+  <div class="lightbar">
     <div class="leds" id="ledsL"></div>
     <div class="steer" id="steer">— <small>brak linii AB</small></div>
   </div>
   <div class="stats">
     <div class="stat"><b id="sSpeed">0,0</b><span>km/h</span></div>
-    <div class="stat"><b id="sArea">0,00</b><span>ha opryskane</span></div>
+    <div class="stat"><b id="sArea">0,00</b><span>ha zrobione</span></div>
     <div class="stat" id="sOverBox"><b id="sOver">0,00</b><span>ha nakładki</span></div>
     <div class="stat" id="sAccBox"><b id="sAcc">—</b><span id="sAccLbl">GPS ± m</span></div>
   </div>
@@ -107,22 +134,31 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
   <button class="icon active" id="center" aria-label="Wyśrodkuj na ciągniku">◎</button>
   <button class="icon" id="menu" aria-label="Ustawienia">☰</button>
 </div>
+<div class="demoTag" id="demoTag" hidden>DEMO</div>
 
 <div class="bottom">
-  <button class="btn" id="ab">Ustaw A<small>linia prowadząca</small></button>
-  <button class="btn" id="spray">Belka OFF<small>dotknij, aby włączyć</small></button>
-  <button class="btn" id="widthBtn"><span id="wLbl">10 m</span><small>szerokość belki</small></button>
+  <div class="pad" id="pad" hidden>
+    <button id="dLeft" aria-label="Skręć w lewo">◀</button>
+    <button id="dSlow" aria-label="Wolniej">▼</button>
+    <button id="dFast" aria-label="Szybciej">▲</button>
+    <button id="dRight" aria-label="Skręć w prawo">▶</button>
+    <button class="exit" id="dExit">Wyjdź<br>z demo</button>
+  </div>
+  <div class="mainbtns">
+    <button class="btn" id="ab">Ustaw A<small>linia prowadząca</small></button>
+    <button class="btn" id="spray">Praca OFF<small>dotknij, aby włączyć</small></button>
+    <button class="btn" id="toolBtn"><span class="tn" id="toolName">Opryskiwacz</span><small id="toolSub">12 m · zawieszany</small></button>
+  </div>
 </div>
 
 <!-- Start -->
 <div class="sheet" id="start">
   <div class="sheet-in start">
     <h2>Prowadzenie GPS</h2>
-    <p class="note">Strzałka to Twój telefon. Gdy belka jest włączona, za strzałką maluje się pas o szerokości belki. Zielone to opryskane, pomarańczowe to nakładki.</p>
-    <div class="row"><label for="w0">Szerokość belki (m)</label>
-      <div class="width"><button data-d="-0.5" data-t="w0">−</button><input id="w0" type="number" inputmode="decimal" step="0.5" min="1" max="60" value="10"><button data-d="0.5" data-t="w0">+</button></div></div>
-    <button class="btn primary" id="goGps">Start z GPS<small>telefon zapyta o lokalizację</small></button>
-    <button class="btn" id="goDemo">Tryb demo<small>symulowany przejazd, do testu w domu</small></button>
+    <p class="note">Strzałka to telefon w kabinie. Gdy praca jest włączona, za maszyną maluje się pas o jej szerokości roboczej. Zielone to zrobione, pomarańczowe to nakładki.</p>
+    <div class="curTool"><div><b id="stTool">—</b><span id="stToolSub">—</span></div><button id="stChange">Zmień sprzęt</button></div>
+    <button class="btn primary" id="goGps">Start z GPS<small>praca w polu</small></button>
+    <button class="btn" id="goDemo">Tryb demo<small>jazda strzałkami, do testu w domu</small></button>
     <p class="note" id="resumeNote" hidden>Zapisane pole zostanie wczytane. „Nowe pole” znajdziesz w ustawieniach (☰).</p>
   </div>
 </div>
@@ -131,18 +167,46 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 <div class="sheet" id="settings" hidden>
   <div class="sheet-in">
     <div class="row"><h2>Ustawienia</h2><button class="icon" id="closeSet" aria-label="Zamknij">✕</button></div>
-    <div class="row"><label for="w1">Szerokość belki (m)</label>
-      <div class="width"><button data-d="-0.5" data-t="w1">−</button><input id="w1" type="number" inputmode="decimal" step="0.5" min="1" max="60" value="10"><button data-d="0.5" data-t="w1">+</button></div></div>
+    <button class="btn wide primary" id="exitDemoSet" hidden>Wyjdź z demo<small>wróć do pracy z GPS</small></button>
+    <div class="curTool"><div><b id="setTool">—</b><span id="setToolSub">—</span></div><button id="setChange">Zmień sprzęt</button></div>
     <div><div class="note" style="margin-bottom:6px">Obrót mapy</div>
       <div class="seg"><button id="oHead" class="sel">Kierunek jazdy w górę</button><button id="oNorth">Północ w górę</button></div></div>
     <div class="upd" id="updBox" hidden>
-      <div class="row"><div style="min-width:0"><b>Aktualizacja</b><div class="note" id="updText">—</div></div><button class="btn" id="updBtn">Sprawdź</button></div>
+      <div class="row"><div><b>Aktualizacja</b><div class="note" id="updText">—</div></div><button class="btn" id="updBtn">Sprawdź</button></div>
       <div class="bar" id="updBar" hidden><i id="updFill"></i></div>
     </div>
     <button class="btn wide" id="clearAB">Usuń linię AB</button>
-    <button class="btn wide danger" id="newField">Nowe pole<small>kasuje opryskany obszar</small></button>
+    <button class="btn wide danger" id="newField">Nowe pole<small>kasuje zrobiony obszar</small></button>
     <p class="note" id="perf" style="color:var(--fg)">Ekran: — kl./s</p>
-    <p class="note">GPS w telefonie ma dokładność ok. 2–5 m, więc pasy mogą się lekko rozjeżdżać. Telefon trzymaj w stałym miejscu w kabinie. Ekran nie wygasa, dopóki strona jest otwarta.</p>
+    <p class="note">GPS w telefonie ma dokładność ok. 2–5 m, więc pasy mogą się lekko rozjeżdżać. Telefon trzymaj w stałym miejscu w kabinie. Ekran nie wygasa, dopóki aplikacja jest otwarta.</p>
+  </div>
+</div>
+
+<!-- Equipment list -->
+<div class="sheet" id="toolsSheet" hidden>
+  <div class="sheet-in">
+    <div class="row"><h2>Sprzęt</h2><button class="icon" id="closeTools" aria-label="Zamknij">✕</button></div>
+    <div class="tools" id="toolList"></div>
+    <button class="btn wide" id="addTool">+ Dodaj sprzęt</button>
+  </div>
+</div>
+
+<!-- Equipment editor -->
+<div class="sheet" id="editSheet" hidden>
+  <div class="sheet-in">
+    <div class="row"><h2 id="editTitle">Nowy sprzęt</h2><button class="icon" id="closeEdit" aria-label="Zamknij">✕</button></div>
+    <div class="field"><label for="tType">Rodzaj</label><select id="tType"></select></div>
+    <div class="field"><label for="tName">Nazwa</label><input type="text" id="tName" maxlength="40" placeholder="np. Opryskiwacz Krukowiak"></div>
+    <div><div class="note" style="margin-bottom:6px">Zaczep</div>
+      <div class="seg"><button id="hM" class="sel">Zawieszany (TUZ)</button><button id="hC">Ciągany (na dyszlu)</button></div></div>
+    <svg class="scheme" id="scheme" width="340" height="92" viewBox="0 0 340 92" aria-hidden="true"></svg>
+    <div class="row"><label for="tW">Szerokość robocza (m)</label><div class="num"><button data-step="-0.5" data-for="tW">−</button><input id="tW" type="number" inputmode="decimal" step="0.1" value="12"><button data-step="0.5" data-for="tW">+</button></div></div>
+    <div class="row"><label for="tA">A: telefon → zaczep (m)</label><div class="num"><button data-step="-0.1" data-for="tA">−</button><input id="tA" type="number" inputmode="decimal" step="0.1" value="2.8"><button data-step="0.1" data-for="tA">+</button></div></div>
+    <div class="row"><label for="tB" id="tBLbl">B: zaczep → pas roboczy (m)</label><div class="num"><button data-step="-0.1" data-for="tB">−</button><input id="tB" type="number" inputmode="decimal" step="0.1" value="1.5"><button data-step="0.1" data-for="tB">+</button></div></div>
+    <div class="row"><label for="tO">C: przesunięcie w bok (m, + w prawo)</label><div class="num"><button data-step="-0.1" data-for="tO">−</button><input id="tO" type="number" inputmode="decimal" step="0.1" value="0"><button data-step="0.1" data-for="tO">+</button></div></div>
+    <p class="note" id="tHint">Zmierz od miejsca, gdzie leży telefon, do sworznia zaczepu.</p>
+    <button class="btn wide primary" id="saveTool">Zapisz i wybierz</button>
+    <button class="btn wide danger" id="delTool">Usuń ten sprzęt</button>
   </div>
 </div>
 
@@ -154,23 +218,69 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 const $=id=>document.getElementById(id);
 const fmt=(n,d)=>n.toLocaleString('pl-PL',{minimumFractionDigits:d,maximumFractionDigits:d});
 const canvas=$('map'),ctx=canvas.getContext('2d');
+const lsGet=k=>{try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}};
+const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 
-const S={W:10,origin:null,pts:[],spraying:false,A:null,B:null,follow:true,headUp:true,zoom:4,
-  cam:{x:0,y:0},cur:null,heading:Math.PI/2,speed:0,acc:null,demo:false,started:false};
-let cells=new Map(),over=new Set(),overList=[];
+/* ---------- equipment ---------- */
+// m = zawieszany (3-point), c = ciągany (trailed). w width, b hitch→working line, o lateral offset (+ right)
+const TYPES={
+  oprysk:{n:'Opryskiwacz',work:'opryskane',m:{w:12,b:1.5,o:0},c:{w:24,b:5.5,o:0}},
+  siew:{n:'Siewnik',work:'zasiane',m:{w:3,b:1.4,o:0},c:{w:6,b:6.5,o:0}},
+  rozs:{n:'Rozsiewacz nawozu',work:'nawiezione',m:{w:24,b:0.9,o:0},c:{w:24,b:4.5,o:0}},
+  kult:{n:'Kultywator',work:'uprawione',m:{w:3,b:1.3,o:0},c:{w:6,b:5,o:0}},
+  brona:{n:'Brona talerzowa',work:'uprawione',m:{w:3,b:1.2,o:0},c:{w:6,b:4.5,o:0}},
+  agreg:{n:'Agregat uprawowo-siewny',work:'zasiane',m:{w:3,b:2,o:0},c:{w:6,b:7,o:0}},
+  plug:{n:'Pług',work:'zaorane',m:{w:1.6,b:2.2,o:0.8},c:{w:2.4,b:4.5,o:1}},
+  kos:{n:'Kosiarka',work:'skoszone',m:{w:3,b:0.8,o:1.8},c:{w:3.5,b:4,o:2}},
+  zgrab:{n:'Zgrabiarka',work:'zgrabione',m:{w:4,b:1.5,o:0},c:{w:7,b:4,o:0}},
+  inny:{n:'Inny sprzęt',work:'zrobione',m:{w:3,b:1.5,o:0},c:{w:6,b:5,o:0}}
+};
+let T=lsGet('gpsPole.tools');
+if(!T||!Array.isArray(T.list)||!T.list.length){
+  const old=lsGet('gpsPole.v1');
+  T={list:[{id:'t1',type:'oprysk',name:'Opryskiwacz',hitch:'m',w:old&&old.W||12,a:2.8,b:1.5,o:0}],active:'t1'};
+}
+const tool=()=>T.list.find(t=>t.id===T.active)||T.list[0];
+const saveTools=()=>lsSet('gpsPole.tools',T);
+const hitchName=h=>h==='c'?'ciągany':'zawieszany';
+
+/* ---------- state ---------- */
+const S={origin:null,pts:[],spraying:false,A:null,B:null,follow:true,headUp:true,zoom:4,
+  cam:{x:0,y:0},cur:null,heading:Math.PI/2,hdgOk:false,lastP:null,speed:0,acc:null,demo:false,started:false,breakNext:false};
+let cells=new Map(),over=new Set();
 const KEY='gpsPole.v1';
-
-/* ---------- storage ---------- */
-function save(){ if(S.demo) return; try{localStorage.setItem(KEY,JSON.stringify({W:S.W,origin:S.origin,pts:S.pts,A:S.A,B:S.B,headUp:S.headUp}))}catch(e){} }
-function load(){ try{const d=JSON.parse(localStorage.getItem(KEY)||'null'); return d&&d.origin?d:null}catch(e){return null} }
-let saveT=0; function saveSoon(){clearTimeout(saveT);saveT=setTimeout(save,1500)}
+function save(){if(S.demo)return;lsSet(KEY,{origin:S.origin,pts:S.pts,A:S.A,B:S.B,headUp:S.headUp})}
+let saveT=0;function saveSoon(){clearTimeout(saveT);saveT=setTimeout(save,1500)}
 
 /* ---------- geometry ---------- */
 function toLocal(lat,lon){const o=S.origin;return{x:(lon-o.lon)*Math.cos(o.lat*Math.PI/180)*111320,y:(lat-o.lat)*110574}}
 function edges(p){const nx=-Math.sin(p.h),ny=Math.cos(p.h),hw=p.w/2;return[{x:p.x+nx*hw,y:p.y+ny*hw},{x:p.x-nx*hw,y:p.y-ny*hw}]}
 function inTri(px,py,a,b,c){const d1=(px-b.x)*(a.y-b.y)-(a.x-b.x)*(py-b.y),d2=(px-c.x)*(b.y-c.y)-(b.x-c.x)*(py-c.y),d3=(px-a.x)*(c.y-a.y)-(c.x-a.x)*(py-a.y);
   return !(((d1<0)||(d2<0)||(d3<0))&&((d1>0)||(d2>0)||(d3>0)))}
+
+/* tool pose from phone position + tractor heading. tr = trailer state {x,y} kept between calls */
+function toolPose(P,h,t,tr){
+  const H={x:P.x-Math.cos(h)*t.a,y:P.y-Math.sin(h)*t.a};let th,cx,cy;
+  if(t.hitch==='c'){
+    if(!tr.ok){tr.x=H.x-Math.cos(h)*t.b;tr.y=H.y-Math.sin(h)*t.b;tr.ok=true}
+    let vx=tr.x-H.x,vy=tr.y-H.y,l=Math.hypot(vx,vy);if(l<1e-3){vx=-Math.cos(h);vy=-Math.sin(h);l=1}
+    tr.x=H.x+vx/l*t.b;tr.y=H.y+vy/l*t.b;th=Math.atan2(H.y-tr.y,H.x-tr.x);cx=tr.x;cy=tr.y;
+  }else{th=h;cx=H.x-Math.cos(h)*t.b;cy=H.y-Math.sin(h)*t.b}
+  // + offset = right of travel direction
+  cx+=Math.sin(th)*t.o;cy-=Math.cos(th)*t.o;
+  return{x:cx,y:cy,h:th,H};
+}
+const TRf={ok:false},TRd={ok:false};   // trailer state: at GPS fixes / on screen
+
+/* coverage tiles (51 m each) so a frame only blits images */
+const TS=256,TPX=5,TM=TS/TPX;let tiles=new Map();
+function tileAt(tx,ty){const k=(tx+30000)*65536+(ty+30000);let t=tiles.get(k);
+  if(!t){const c=document.createElement('canvas');c.width=c.height=TS;const g=c.getContext('2d');g.setTransform(TPX,0,0,-TPX,-tx*TS,(ty+1)*TS);t={c,g,tx,ty};tiles.set(k,t)}return t}
+function paintPoly(q,color){const xs=q.map(v=>v.x),ys=q.map(v=>v.y);
+  for(let tx=Math.floor(Math.min(...xs)/TM);tx<=Math.floor(Math.max(...xs)/TM);tx++)for(let ty=Math.floor(Math.min(...ys)/TM);ty<=Math.floor(Math.max(...ys)/TM);ty++){
+    const g=tileAt(tx,ty).g;g.beginPath();g.moveTo(q[0].x,q[0].y);for(let i=1;i<q.length;i++)g.lineTo(q[i].x,q[i].y);g.closePath();g.fillStyle=color;g.fill()}}
 function rasterize(p1,p2){
+  if(Math.hypot(p2.x-p1.x,p2.y-p1.y)>15)return;
   const [L1,R1]=edges(p1),[L2,R2]=edges(p2),q=[L1,L2,R2,R1];
   const minx=Math.floor(Math.min(...q.map(v=>v.x))),maxx=Math.floor(Math.max(...q.map(v=>v.x)));
   const miny=Math.floor(Math.min(...q.map(v=>v.y))),maxy=Math.floor(Math.max(...q.map(v=>v.y)));
@@ -180,42 +290,37 @@ function rasterize(p1,p2){
     if(!(inTri(cx,cy,L1,L2,R2)||inTri(cx,cy,L1,R2,R1)))continue;
     const k=(ix+50000)*100000+(iy+50000),old=cells.get(k);
     if(old===undefined)cells.set(k,t);
-    else if(t-old>20&&!over.has(k)){over.add(k);overList.push(ix,iy);paintPoly([{x:ix,y:iy},{x:ix+1,y:iy},{x:ix+1,y:iy+1},{x:ix,y:iy+1}],'#ff6a3d')}
+    else if(t-old>20&&!over.has(k)){over.add(k);paintPoly([{x:ix,y:iy},{x:ix+1,y:iy},{x:ix+1,y:iy+1},{x:ix,y:iy+1}],'#ff6a3d')}
   }
 }
-/* coverage is painted once into 51 m tiles, so each frame only blits images (smooth at 120 Hz) */
-const TS=256,TPX=5,TM=TS/TPX;let tiles=new Map();
-function tileAt(tx,ty){const k=(tx+30000)*65536+(ty+30000);let t=tiles.get(k);
-  if(!t){const c=document.createElement('canvas');c.width=c.height=TS;const g=c.getContext('2d');g.setTransform(TPX,0,0,-TPX,-tx*TS,(ty+1)*TS);t={c,g,tx,ty};tiles.set(k,t)}return t}
-function paintPoly(q,color){const xs=q.map(v=>v.x),ys=q.map(v=>v.y);
-  for(let tx=Math.floor(Math.min(...xs)/TM);tx<=Math.floor(Math.max(...xs)/TM);tx++)for(let ty=Math.floor(Math.min(...ys)/TM);ty<=Math.floor(Math.max(...ys)/TM);ty++){
-    const g=tileAt(tx,ty).g;g.beginPath();g.moveTo(q[0].x,q[0].y);for(let i=1;i<q.length;i++)g.lineTo(q[i].x,q[i].y);g.closePath();g.fillStyle=color;g.fill()}}
-function rebuild(){cells=new Map();over=new Set();overList=[];tiles=new Map();for(let i=1;i<S.pts.length;i++)if(S.pts[i].on)rasterize(S.pts[i-1],S.pts[i])}
+function rebuild(){cells=new Map();over=new Set();tiles=new Map();for(let i=1;i<S.pts.length;i++)if(S.pts[i].on)rasterize(S.pts[i-1],S.pts[i])}
 
 /* ---------- position input ---------- */
-/* display state D is predicted between fixes and eased every frame */
 const D={x:0,y:0,h:Math.PI/2,ok:false},F={x:0,y:0,vx:0,vy:0,at:0};let fixTimes=[];
 function onLocal(p,acc,spd,t){
   S.acc=acc;const now=performance.now();fixTimes.push(now);while(fixTimes.length&&now-fixTimes[0]>2000)fixTimes.shift();
-  if(acc!=null&&acc>25){S.cur=S.cur||p;ui();return}
-  if(F.at){const dt=(now-F.at)/1000;if(dt>0.05&&dt<3){const vx=(p.x-F.x)/dt,vy=(p.y-F.y)/dt;F.vx=F.vx*0.4+vx*0.6;F.vy=F.vy*0.4+vy*0.6}}
+  if(acc!=null&&acc>25){ui();return}
+  if(F.at){const dt=(now-F.at)/1000;if(dt>0.02&&dt<3){const k=Math.min(1,dt*2.5);F.vx+=((p.x-F.x)/dt-F.vx)*k;F.vy+=((p.y-F.y)/dt-F.vy)*k}}
   if(spd!=null&&spd<0.3){F.vx=0;F.vy=0}
   F.x=p.x;F.y=p.y;F.at=now;if(!D.ok){D.x=p.x;D.y=p.y;D.ok=true}
-  const last=S.pts[S.pts.length-1];
   S.cur=p;
-  if(!last){S.pts.push({x:p.x,y:p.y,h:S.heading,w:S.W,on:false,t});ui();return}
-  const dx=p.x-last.x,dy=p.y-last.y,d=Math.hypot(dx,dy);
-  if(d<0.3){if(spd!=null)S.speed=spd;ui();return}
-  const h=Math.atan2(dy,dx);S.heading=h;
-  if(S.pts.length===1)last.h=h;
-  S.speed=(spd!=null&&spd>=0)?spd:d/Math.max(.2,t-last.t);
-  const np={x:p.x,y:p.y,h,w:S.W,on:S.spraying,t};
-  S.pts.push(np);
+  // tractor heading from movement
+  if(!S.lastP)S.lastP=p;
+  else{const dd=Math.hypot(p.x-S.lastP.x,p.y-S.lastP.y);if(dd>=0.4){S.heading=Math.atan2(p.y-S.lastP.y,p.x-S.lastP.x);S.lastP=p;if(!S.hdgOk){S.hdgOk=true;D.h=S.heading}}}
+  S.speed=(spd!=null&&spd>=0)?spd:Math.hypot(F.vx,F.vy);
+  if(!S.hdgOk){ui();return}
+  const tp=toolPose(p,S.heading,tool(),TRf);
+  const last=S.pts[S.pts.length-1];
+  if(last&&!S.breakNext&&Math.hypot(tp.x-last.x,tp.y-last.y)<0.3){ui();return}
+  const np={x:tp.x,y:tp.y,h:tp.h,w:tool().w,on:S.spraying&&!!last&&!S.breakNext,t};
+  S.breakNext=false;S.pts.push(np);
   if(np.on)rasterize(last,np);
   saveSoon();ui();
 }
-let watchId=null,nativeOn=false;
-let gpsMsg='Czekam na sygnał GPS…',gotFix=false;
+function resetTrack(){S.lastP=null;S.hdgOk=false;TRf.ok=false;TRd.ok=false;S.breakNext=true}
+
+/* ---------- GPS: native feed from the app (30/s), browser as fallback ---------- */
+let watchId=null,nativeOn=false,gpsMsg='Czekam na sygnał GPS…',gotFix=false;
 window.nativeFix=function(lat,lon,acc,spd,brg,ms){
   if(!S.started||S.demo)return;
   if(!nativeOn){nativeOn=true;if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null}}
@@ -225,105 +330,123 @@ window.nativeFix=function(lat,lon,acc,spd,brg,ms){
 window.nativeGpsStatus=function(m){gpsMsg=m};
 function startGps(){
   if(nativeOn)return;
-  if(!window.isSecureContext){gpsMsg='GPS zablokowany: otwórz aplikację z adresu https, nie z pliku.';toast(gpsMsg);dirty();return}
-  if(!('geolocation' in navigator)){gpsMsg='Ten telefon nie udostępnia GPS w przeglądarce.';toast(gpsMsg);dirty();return}
+  if(!window.isSecureContext){gpsMsg='GPS zablokowany: otwórz aplikację z adresu https, nie z pliku.';toast(gpsMsg);return}
+  if(!('geolocation' in navigator)){gpsMsg='Ten telefon nie udostępnia GPS.';toast(gpsMsg);return}
   if(watchId!==null)navigator.geolocation.clearWatch(watchId);
-  gpsMsg='Szukam satelitów… (włącz lokalizację w telefonie)';dirty();
+  gpsMsg='Szukam satelitów… (włącz lokalizację w telefonie)';
   watchId=navigator.geolocation.watchPosition(pos=>{
-    if(nativeOn)return;const c=pos.coords;gotFix=true;
+    if(nativeOn||S.demo)return;const c=pos.coords;gotFix=true;
     if(!S.origin)S.origin={lat:c.latitude,lon:c.longitude};
     onLocal(toLocal(c.latitude,c.longitude),c.accuracy,c.speed,pos.timestamp/1000);
   },err=>{
-    if(err.code===1){gpsMsg='Brak zgody na lokalizację. Ustawienia telefonu → Aplikacje → Chrome → Uprawnienia → Lokalizacja → Zezwalaj.';toast(gpsMsg);dirty();return}
-    gpsMsg='Brak sygnału GPS. Sprawdź, czy lokalizacja w telefonie jest włączona. Ponawiam…';dirty();
+    if(err.code===1){gpsMsg='Brak zgody na lokalizację. Ustawienia telefonu → Aplikacje → GPS Pole → Uprawnienia → Lokalizacja → Zezwalaj.';toast(gpsMsg);return}
+    gpsMsg='Brak sygnału GPS. Sprawdź, czy lokalizacja w telefonie jest włączona. Ponawiam…';
     if(!nativeOn)setTimeout(startGps,3000);
   },{enableHighAccuracy:true,maximumAge:0,timeout:30000});
 }
 
-/* ---------- demo ---------- */
-let demoT=null,demoS=0;
+/* ---------- demo: drive with arrows ---------- */
+const DM={x:0,y:0,h:Math.PI/2,v:2.5,steer:0,timer:null,last:0};
 function startDemo(){
-  S.demo=true;S.pts=[];S.cur=null;D.ok=false;F.at=0;F.vx=F.vy=0;rebuild();
-  const L=160;S.A={x:0,y:0};S.B={x:0,y:L};abUi();
-  let t0=performance.now()/1000;
-  demoT=setInterval(()=>{
-    const W=S.W,r=W/2,seg=L+Math.PI*r,v=3.0;demoS+=v/3;
-    const i=Math.floor(demoS/seg),u=demoS-i*seg,even=i%2===0;let x,y,straight=u<L;
-    if(straight){x=i*W+0.9*Math.sin(u/22+i);y=even?u:L-u}
-    else{const a=(u-L)/r,cx=i*W+r;x=cx-r*Math.cos(a);y=even?L+r*Math.sin(a):-r*Math.sin(a)}
-    if(S.spraying!==straight){S.spraying=straight;sprayUi()}
-    onLocal({x,y},1.2,v,t0+demoS/v);
-  },333);
+  S.demo=true;S.pts=[];S.cur=null;S.A=S.B=null;D.ok=false;F.at=0;F.vx=F.vy=0;resetTrack();S.breakNext=false;rebuild();
+  DM.x=0;DM.y=0;DM.h=Math.PI/2;DM.v=2.5;DM.steer=0;DM.last=performance.now();
+  $('pad').hidden=false;$('demoTag').hidden=false;$('exitDemoSet').hidden=false;
+  abUi();padUi();
+  DM.timer=setInterval(()=>{
+    const now=performance.now(),dt=Math.min(.1,(now-DM.last)/1000);DM.last=now;
+    const R=Math.max(4,tool().w*0.45);           // tightest turn radius
+    DM.h+=DM.steer*(DM.v/R)*dt;
+    DM.x+=Math.cos(DM.h)*DM.v*dt;DM.y+=Math.sin(DM.h)*DM.v*dt;
+    onLocal({x:DM.x+(Math.random()-.5)*.04,y:DM.y+(Math.random()-.5)*.04},0.8,DM.v,now/1000);
+  },33);
 }
+function exitDemo(){clearInterval(DM.timer);location.reload()}
+function padUi(){$('dSlow').textContent=DM.v<=0.05?'■':'▼'}
+function holdBtn(id,down,up){const b=$(id);
+  b.addEventListener('pointerdown',e=>{e.preventDefault();b.setPointerCapture(e.pointerId);b.classList.add('held');down()});
+  ['pointerup','pointercancel','lostpointercapture'].forEach(ev=>b.addEventListener(ev,()=>{b.classList.remove('held');up&&up()}))}
+holdBtn('dLeft',()=>DM.steer=1,()=>{if(DM.steer===1)DM.steer=0});
+holdBtn('dRight',()=>DM.steer=-1,()=>{if(DM.steer===-1)DM.steer=0});
+holdBtn('dFast',()=>{DM.v=Math.min(8.3,DM.v+0.7);padUi();toast(fmt(DM.v*3.6,0)+' km/h')});
+holdBtn('dSlow',()=>{DM.v=Math.max(0,DM.v-0.7);if(DM.v<0.3)DM.v=0;padUi();toast(DM.v?fmt(DM.v*3.6,0)+' km/h':'Stop')});
+$('dExit').addEventListener('click',exitDemo);
+$('exitDemoSet').addEventListener('click',exitDemo);
+addEventListener('keydown',e=>{if(!S.demo)return;if(e.key==='ArrowLeft')DM.steer=1;if(e.key==='ArrowRight')DM.steer=-1;if(e.key==='ArrowUp'){DM.v=Math.min(8.3,DM.v+0.7);padUi()}if(e.key==='ArrowDown'){DM.v=Math.max(0,DM.v-0.7);padUi()}});
+addEventListener('keyup',e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight')DM.steer=0});
 
-/* ---------- AB guidance ---------- */
+/* ---------- AB guidance (measured at the implement) ---------- */
+let DT={x:0,y:0,h:0,H:{x:0,y:0}};
 function guidance(){
-  if(!S.A||!S.B||!D.ok)return null;
+  if(!S.A||!S.B||!D.ok||!S.hdgOk)return null;
   const dx=S.B.x-S.A.x,dy=S.B.y-S.A.y,len=Math.hypot(dx,dy);if(len<1)return null;
-  const ux=dx/len,uy=dy/len,nx=-uy,ny=ux;
-  const dist=(D.x-S.A.x)*nx+(D.y-S.A.y)*ny,k=Math.round(dist/S.W),e=dist-k*S.W;
+  const W=tool().w,ux=dx/len,uy=dy/len,nx=-uy,ny=ux;
+  const dist=(DT.x-S.A.x)*nx+(DT.y-S.A.y)*ny,k=Math.round(dist/W),e=dist-k*W;
   const same=Math.cos(D.h)*ux+Math.sin(D.h)*uy>=0;
-  const rightOff=same?-e:e; // + = vehicle sits right of line → steer left
-  return{ux,uy,nx,ny,k,e,rightOff};
+  return{ux,uy,nx,ny,k,e,rightOff:same?-e:e};
 }
 
 /* ---------- render ---------- */
-let need=true;function dirty(){need=true}
 let dpr=1,Wpx=0,Hpx=0;
-function resize(){dpr=Math.min(window.devicePixelRatio||1,2.5);Wpx=innerWidth;Hpx=innerHeight;canvas.width=Wpx*dpr;canvas.height=Hpx*dpr;dirty()}
+function resize(){dpr=Math.min(window.devicePixelRatio||1,2.5);Wpx=innerWidth;Hpx=innerHeight;canvas.width=Wpx*dpr;canvas.height=Hpx*dpr}
 function rot(){return S.headUp?D.h-Math.PI/2:0}
-function anchor(){return{x:Wpx/2,y:S.follow&&S.headUp?Hpx*0.64:Hpx*0.52}}
-let lastFrame=0,fps=0,fpsN=0,fpsT=0,uiT=0;
+function anchor(){return{x:Wpx/2,y:S.follow&&S.headUp?Hpx*0.5:Hpx*0.48}}
 function angDiff(a,b){let d=b-a;while(d>Math.PI)d-=2*Math.PI;while(d<-Math.PI)d+=2*Math.PI;return d}
+let lastFrame=0,fps=0,fpsN=0,fpsT=0,uiT=0;
 function frame(ts){
   requestAnimationFrame(frame);
   const dt=lastFrame?Math.min(0.1,(ts-lastFrame)/1000):1/60;lastFrame=ts;
   fpsN++;if(ts-fpsT>=1000){fps=Math.round(fpsN*1000/(ts-fpsT));fpsN=0;fpsT=ts;perfUi()}
+  const tl=tool();
   if(D.ok){const age=Math.min(1,(performance.now()-F.at)/1000),px=F.x+F.vx*age,py=F.y+F.vy*age,k=1-Math.exp(-dt*14);
-    D.x+=(px-D.x)*k;D.y+=(py-D.y)*k;D.h+=angDiff(D.h,S.heading)*(1-Math.exp(-dt*8))}
+    D.x+=(px-D.x)*k;D.y+=(py-D.y)*k;D.h+=angDiff(D.h,S.heading)*(1-Math.exp(-dt*8));
+    DT=toolPose(D,D.h,tl,TRd)}
   if(ts-uiT>70){uiT=ts;lightbar()}
-  if(!need&&!D.ok&&!S.started)return;need=false;
-  if(S.follow&&D.ok){S.cam.x=D.x;S.cam.y=D.y}
+  if(S.follow&&D.ok){if(S.hdgOk){S.cam.x=(D.x+DT.x)/2;S.cam.y=(D.y+DT.y)/2}else{S.cam.x=D.x;S.cam.y=D.y}}
   const s=S.zoom,a=anchor(),r=rot();
   ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#0e130f';ctx.fillRect(0,0,Wpx,Hpx);
   ctx.translate(a.x,a.y);ctx.rotate(r);ctx.scale(s,-s);ctx.translate(-S.cam.x,-S.cam.y);
   const R=Math.hypot(Wpx,Hpx)/s,cx=S.cam.x,cy=S.cam.y;
 
-  // grid
   const step=s>3?10:s>0.8?50:200;ctx.lineWidth=1/s;ctx.strokeStyle='rgba(147,160,144,.10)';ctx.beginPath();
   for(let gx=Math.floor((cx-R)/step)*step;gx<=cx+R;gx+=step){ctx.moveTo(gx,cy-R);ctx.lineTo(gx,cy+R)}
   for(let gy=Math.floor((cy-R)/step)*step;gy<=cy+R;gy+=step){ctx.moveTo(cx-R,gy);ctx.lineTo(cx+R,gy)}
   ctx.stroke();
 
-  // coverage tiles
   ctx.globalAlpha=.5;ctx.imageSmoothingEnabled=true;
   tiles.forEach(t=>{const x0=t.tx*TM,y0=t.ty*TM;if(x0>cx+R||x0+TM<cx-R||y0>cy+R||y0+TM<cy-R)return;
     ctx.save();ctx.translate(x0,y0+TM);ctx.scale(1/TPX,-1/TPX);ctx.drawImage(t.c,0,0);ctx.restore()});
-  // live strip from the last stored point to the arrow
   const lp=S.pts[S.pts.length-1];
-  if(S.spraying&&lp&&D.ok&&Math.hypot(D.x-lp.x,D.y-lp.y)>0.05){const [L1,R1]=edges(lp),[L2,R2]=edges({x:D.x,y:D.y,h:D.h,w:S.W});
-    ctx.beginPath();ctx.moveTo(L1.x,L1.y);ctx.lineTo(L2.x,L2.y);ctx.lineTo(R2.x,R2.y);ctx.lineTo(R1.x,R1.y);ctx.closePath();ctx.fillStyle='#6fd66f';ctx.fill()}
+  if(S.spraying&&lp&&D.ok&&S.hdgOk){const d=Math.hypot(DT.x-lp.x,DT.y-lp.y);if(d>0.05&&d<10){
+    const [L1,R1]=edges(lp),[L2,R2]=edges({x:DT.x,y:DT.y,h:DT.h,w:tl.w});
+    ctx.beginPath();ctx.moveTo(L1.x,L1.y);ctx.lineTo(L2.x,L2.y);ctx.lineTo(R2.x,R2.y);ctx.lineTo(R1.x,R1.y);ctx.closePath();ctx.fillStyle='#6fd66f';ctx.fill()}}
   ctx.globalAlpha=1;
 
-  // AB lines
-  const g=guidance();
+  const g=guidance(),W=tl.w;
   if(S.A&&S.B){const dx=S.B.x-S.A.x,dy=S.B.y-S.A.y,len=Math.hypot(dx,dy);
-    if(len>=1){const ux=dx/len,uy=dy/len,nx=-uy,ny=ux,base=(cx-S.A.x)*nx+(cy-S.A.y)*ny,k0=Math.round(base/S.W),n=Math.ceil(R/S.W)+1,along=(cx-S.A.x)*ux+(cy-S.A.y)*uy;
-      for(let k=k0-n;k<=k0+n;k++){const ox=S.A.x+nx*k*S.W,oy=S.A.y+ny*k*S.W;const cur=g&&k===g.k;
+    if(len>=1){const ux=dx/len,uy=dy/len,nx=-uy,ny=ux,base=(cx-S.A.x)*nx+(cy-S.A.y)*ny,k0=Math.round(base/W),n=Math.min(200,Math.ceil(R/W)+1),along=(cx-S.A.x)*ux+(cy-S.A.y)*uy;
+      for(let k=k0-n;k<=k0+n;k++){const ox=S.A.x+nx*k*W,oy=S.A.y+ny*k*W;const cur=g&&k===g.k;
         ctx.beginPath();ctx.moveTo(ox+ux*(along-R),oy+uy*(along-R));ctx.lineTo(ox+ux*(along+R),oy+uy*(along+R));
         ctx.lineWidth=(cur?3:1.2)/s;ctx.strokeStyle=cur?'rgba(255,178,30,.95)':'rgba(215,228,210,.28)';ctx.stroke()}}}
-  // A/B markers
   [['A',S.A],['B',S.B]].forEach(([t,p])=>{if(!p)return;ctx.save();ctx.translate(p.x,p.y);ctx.scale(1/s,-1/s);ctx.rotate(-r);
     ctx.fillStyle='#ffb21e';ctx.beginPath();ctx.arc(0,0,11,0,7);ctx.fill();ctx.fillStyle='#1b1404';ctx.font='700 14px Barlow Condensed,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,0,1);ctx.restore()});
 
-  // tractor + boom
-  if(D.ok){const p=D,h=D.h,nx=-Math.sin(h),ny=Math.cos(h),hw=S.W/2,bx=p.x-Math.cos(h)*0.4,by=p.y-Math.sin(h)*0.4;
-    ctx.beginPath();ctx.moveTo(bx+nx*hw,by+ny*hw);ctx.lineTo(bx-nx*hw,by-ny*hw);ctx.lineCap='round';
-    ctx.lineWidth=Math.max(5/s,0.5);ctx.strokeStyle=S.spraying?'#6fd66f':'#5d6a5b';ctx.stroke();
-    if(S.acc){ctx.beginPath();ctx.arc(p.x,p.y,S.acc,0,7);ctx.fillStyle='rgba(255,178,30,.08)';ctx.fill()}
+  if(D.ok){const p=D,h=D.h,H=DT.H;ctx.lineCap='round';ctx.lineJoin='round';
+    if(S.acc){ctx.beginPath();ctx.arc(p.x,p.y,S.acc,0,7);ctx.fillStyle='rgba(255,178,30,.07)';ctx.fill()}
+    if(S.hdgOk){
+      // tractor body (phone → hitch)
+      ctx.beginPath();ctx.moveTo(p.x+Math.cos(h)*1.2,p.y+Math.sin(h)*1.2);ctx.lineTo(H.x,H.y);ctx.lineWidth=Math.max(2.2,9/s);ctx.strokeStyle='#3b4a3c';ctx.stroke();
+      // drawbar / three-point arm (hitch → implement)
+      ctx.beginPath();ctx.moveTo(H.x,H.y);ctx.lineTo(DT.x-Math.sin(DT.h)*tl.o,DT.y+Math.cos(DT.h)*tl.o);ctx.lineWidth=Math.max(0.25,3/s);ctx.strokeStyle='#93a090';ctx.stroke();
+      // implement working bar
+      const nx=-Math.sin(DT.h),ny=Math.cos(DT.h),hw=tl.w/2;
+      ctx.beginPath();ctx.moveTo(DT.x+nx*hw,DT.y+ny*hw);ctx.lineTo(DT.x-nx*hw,DT.y-ny*hw);
+      ctx.lineWidth=Math.max(6/s,0.6);ctx.strokeStyle=S.spraying?'#6fd66f':'#6d7a6a';ctx.stroke();
+      ctx.beginPath();ctx.arc(H.x,H.y,4/s,0,7);ctx.fillStyle='#eef3ea';ctx.fill();
+    }
     ctx.save();ctx.translate(p.x,p.y);ctx.rotate(h);ctx.scale(1/s,1/s);
     ctx.beginPath();ctx.moveTo(22,0);ctx.lineTo(-14,-14);ctx.lineTo(-7,0);ctx.lineTo(-14,14);ctx.closePath();
-    ctx.fillStyle='#ffb21e';ctx.strokeStyle='#1b1404';ctx.lineWidth=2.5;ctx.lineJoin='round';ctx.fill();ctx.stroke();ctx.restore()}
+    ctx.fillStyle='#ffb21e';ctx.strokeStyle='#1b1404';ctx.lineWidth=2.5;ctx.fill();ctx.stroke();ctx.restore()}
+
   if(S.started&&!S.demo&&!gotFix){ctx.setTransform(dpr,0,0,dpr,0,0);ctx.font='600 16px Barlow,sans-serif';ctx.textAlign='center';
     const words=gpsMsg.split(' '),lines=[];let ln='';const maxW=Math.min(Wpx-48,420);
     words.forEach(w=>{const t=ln?ln+' '+w:w;if(ctx.measureText(t).width>maxW&&ln){lines.push(ln);ln=w}else ln=t});if(ln)lines.push(ln);
@@ -337,12 +460,11 @@ function ui(){
   $('sSpeed').textContent=fmt(S.speed*3.6,1);
   $('sArea').textContent=fmt(cells.size/10000,2);
   $('sOver').textContent=fmt(over.size/10000,2);$('sOverBox').classList.toggle('warn',over.size>0);
-  const ab=$('sAccBox');if(S.acc==null){$('sAcc').textContent='—'}else{$('sAcc').innerHTML=S.acc<=3?'<span class="ok">'+fmt(S.acc,1)+'</span>':fmt(S.acc,1)}
-  ab.classList.toggle('warn',S.acc!=null&&S.acc>8);
-  lightbar();
+  if(S.acc==null)$('sAcc').textContent='—';else $('sAcc').innerHTML=S.acc<=3?'<span class="ok">'+fmt(S.acc,1)+'</span>':fmt(S.acc,1);
+  $('sAccBox').classList.toggle('warn',S.acc!=null&&S.acc>8);
 }
 function perfUi(){const hz=fixTimes.length>1?(fixTimes.length-1)*1000/(fixTimes[fixTimes.length-1]-fixTimes[0]):0;
-  $('sAccLbl').textContent='± m · '+fmt(hz,0)+' Hz';$('perf').textContent='Ekran: '+fps+' kl./s · GPS: '+fmt(hz,1)+' odczytów/s'+(nativeOn?' (moduł GPS telefonu)':'')}
+  $('sAccLbl').textContent='± m · '+fmt(hz,0)+' Hz';$('perf').textContent='Ekran: '+fps+' kl./s · GPS: '+fmt(hz,1)+' odczytów/s'+(nativeOn?' (moduł GPS telefonu)':S.demo?' (demo)':'')}
 let lbKey='';
 function lightbar(){
   const g=guidance();
@@ -354,77 +476,137 @@ function lightbar(){
   if(m<0.15)$('steer').innerHTML='NA LINII <small>pas '+(g.k>=0?'+':'')+g.k+'</small>';
   else $('steer').innerHTML=(off>0?'◀ ':'')+fmt(m,2)+' m'+(off<0?' ▶':'')+'<small>'+(off>0?'skręć w lewo':'skręć w prawo')+'</small>';
 }
-function sprayUi(){const b=$('spray');b.classList.toggle('on',S.spraying);b.innerHTML=S.spraying?'Belka ON<small>maluje pas za Tobą</small>':'Belka OFF<small>dotknij, aby włączyć</small>'}
+function sprayUi(){const b=$('spray');b.classList.toggle('on',S.spraying);b.innerHTML=S.spraying?'Praca ON<small>maluje pas za maszyną</small>':'Praca OFF<small>dotknij, aby włączyć</small>'}
 function abUi(){const b=$('ab');b.classList.toggle('set',!!(S.A&&S.B));b.innerHTML=!S.A?'Ustaw A<small>linia prowadząca</small>':!S.B?'Ustaw B<small>koniec przejazdu</small>':'Linia AB<small>aktywna</small>'}
-function widthUi(){$('wLbl').textContent=fmt(S.W,S.W%1?1:0)+' m';$('w0').value=S.W;$('w1').value=S.W}
+function toolUi(){const t=tool(),sub=fmt(t.w,t.w%1?1:0)+' m · '+hitchName(t.hitch);
+  $('toolName').textContent=t.name;$('toolSub').textContent=sub;
+  ['st','set'].forEach(p=>{$(p+'Tool').textContent=t.name;$(p+'ToolSub').textContent=sub+(t.o?' · przesunięty '+fmt(Math.abs(t.o),1)+' m w '+(t.o>0?'prawo':'lewo'):'')});
+  document.querySelector('#sArea+span').textContent='ha '+(TYPES[t.type]||TYPES.inny).work;}
 function orientUi(){$('oHead').classList.toggle('sel',S.headUp);$('oNorth').classList.toggle('sel',!S.headUp)}
-let toastT;function toast(m){const t=$('toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,3500)}
-function setW(v){v=Math.max(1,Math.min(60,Math.round((+v||10)*2)/2));S.W=v;widthUi();ui();dirty();saveSoon()}
+let toastT;function toast(m){const t=$('toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,2600)}
+function fitZoom(){S.zoom=Math.max(0.3,Math.min(20,Wpx*0.3/tool().w))}
 
-document.querySelectorAll('[data-d]').forEach(b=>b.addEventListener('click',()=>setW((+$(b.dataset.t).value||S.W)+(+b.dataset.d))));
-['w0','w1'].forEach(id=>$(id).addEventListener('change',e=>setW(e.target.value)));
-$('spray').addEventListener('click',()=>{if(S.demo){toast('W demo belka włącza się sama na prostych.');return}S.spraying=!S.spraying;if(S.pts.length)S.pts[S.pts.length-1].on=S.pts[S.pts.length-1].on;sprayUi()});
-$('ab').addEventListener('click',()=>{if(!S.cur){toast('Najpierw poczekaj na sygnał GPS.');return}
-  if(!S.A){S.A={x:S.cur.x,y:S.cur.y};toast('Punkt A ustawiony. Przejedź pas i ustaw B.')}
-  else if(!S.B){if(Math.hypot(S.cur.x-S.A.x,S.cur.y-S.A.y)<20){toast('Odjedź co najmniej 20 m od punktu A.');return}S.B={x:S.cur.x,y:S.cur.y};toast('Linia AB gotowa. Kolejne pasy co '+fmt(S.W,1)+' m.')}
-  else{toast('Linię AB usuniesz w ustawieniach (☰).')}
-  abUi();ui();dirty();saveSoon()});
-$('widthBtn').addEventListener('click',()=>{$('settings').hidden=false});
+/* equipment list + editor */
+function renderTools(){const L=$('toolList');L.textContent='';
+  T.list.forEach(t=>{const row=document.createElement('div');row.className='tool'+(t.id===T.active?' sel':'');
+    const pick=document.createElement('button');pick.className='pick';
+    const b=document.createElement('b');b.textContent=t.name;const sp=document.createElement('span');
+    sp.textContent=(TYPES[t.type]||TYPES.inny).n+' · '+hitchName(t.hitch)+' · '+fmt(t.w,t.w%1?1:0)+' m';pick.append(b,sp);
+    pick.addEventListener('click',()=>{selectTool(t.id);$('toolsSheet').hidden=true});
+    const ed=document.createElement('button');ed.className='edit';ed.textContent='Edytuj';ed.addEventListener('click',()=>openEditor(t.id));
+    row.append(pick,ed);L.appendChild(row)})}
+function selectTool(id){if(id===T.active)return;T.active=id;saveTools();resetTrack();toolUi();fitZoom();toast('Wybrano: '+tool().name)}
+function openTools(){renderTools();$('toolsSheet').hidden=false}
+let editId=null,editHitch='m',nameTouched=false;
+Object.keys(TYPES).forEach(k=>{const o=document.createElement('option');o.value=k;o.textContent=TYPES[k].n;$('tType').appendChild(o)});
+function applyDefaults(){const ty=TYPES[$('tType').value]||TYPES.inny,d=ty[editHitch];
+  $('tW').value=d.w;$('tB').value=d.b;$('tO').value=d.o;if(!nameTouched)$('tName').value=ty.n;scheme()}
+function hitchSel(h){editHitch=h;$('hM').classList.toggle('sel',h==='m');$('hC').classList.toggle('sel',h==='c');
+  $('tBLbl').textContent=h==='c'?'B: zaczep → koła/pas roboczy (m)':'B: zaczep → pas roboczy (m)';
+  $('tHint').textContent=h==='c'?'Sprzęt ciągany jedzie za dyszlem i na zakrętach ścina łuk. B mierz od sworznia zaczepu do osi kół maszyny.':'Sprzęt zawieszany jedzie sztywno za ciągnikiem. B mierz od sworzni TUZ do miejsca, gdzie maszyna pracuje.';scheme()}
+function openEditor(id){editId=id;const t=id?T.list.find(x=>x.id===id):null;
+  $('editTitle').textContent=t?'Edytuj sprzęt':'Nowy sprzęt';$('delTool').hidden=!t||T.list.length<2;
+  if(t){$('tType').value=t.type;$('tName').value=t.name;$('tW').value=t.w;$('tA').value=t.a;$('tB').value=t.b;$('tO').value=t.o;nameTouched=true;hitchSel(t.hitch)}
+  else{$('tType').value='siew';$('tA').value=tool().a;nameTouched=false;hitchSel('m');applyDefaults()}
+  delete $('delTool').dataset.arm;$('delTool').textContent='Usuń ten sprzęt';
+  $('editSheet').hidden=false}
+function num(id,min,max,def){const v=parseFloat(String($(id).value).replace(',','.'));return isNaN(v)?def:Math.max(min,Math.min(max,Math.round(v*100)/100))}
+function scheme(){const W=num('tW',0.5,60,3),A=num('tA',0,15,2.8),B=num('tB',0,20,1.5),O=num('tO',-20,20,0),c=editHitch==='c';
+  const sc=Math.min(240/(A+B+1.2),26),x0=330-1.2*sc,px=x=>x0-x*sc,y0=48,bw=Math.min(34,W*sc*0.5+6),oy=Math.max(-28,Math.min(28,O*sc*0.4));
+  const t=(x,y,c,txt,a)=>'<text x="'+x+'" y="'+y+'" fill="'+c+'" font-size="12" text-anchor="'+(a||'middle')+'" font-family="Barlow,sans-serif">'+txt+'</text>';
+  $('scheme').innerHTML=
+   '<rect x="'+px(A)+'" y="'+(y0-12)+'" width="'+((A+1.2)*sc)+'" height="24" rx="5" fill="#2a352b"/>'+
+   '<path d="M'+(px(0)+9)+' '+y0+'l-14 -9v18z" fill="#ffb21e"/>'+
+   '<line x1="'+px(A)+'" y1="'+y0+'" x2="'+px(A+B)+'" y2="'+(y0+oy)+'" stroke="#93a090" stroke-width="'+(c?2:5)+'"/>'+
+   '<circle cx="'+px(A)+'" cy="'+y0+'" r="4" fill="#eef3ea"/>'+
+   '<rect x="'+(px(A+B)-4)+'" y="'+(y0+oy-bw)+'" width="8" height="'+(2*bw)+'" rx="2" fill="#6fd66f"/>'+
+   t((px(0)+px(A))/2,y0+30,'#93a090','A '+fmt(A,1)+' m')+t(px(0),y0-18,'#ffb21e','telefon')+
+   t((px(A)+px(A+B))/2,y0-18,'#93a090','B '+fmt(B,1)+' m')+t(px(A+B)-10,y0+4,'#6fd66f',fmt(W,1)+' m','end')+
+   (O?t(px(A+B)+10,y0+oy+(O>0?24:-16),'#93a090','C '+fmt(O,1)+' m','start'):'')}
+$('tType').addEventListener('change',applyDefaults);
+$('tName').addEventListener('input',()=>nameTouched=true);
+$('hM').addEventListener('click',()=>{hitchSel('m');applyDefaults()});
+$('hC').addEventListener('click',()=>{hitchSel('c');applyDefaults()});
+['tW','tA','tB','tO'].forEach(id=>$(id).addEventListener('input',scheme));
+document.querySelectorAll('[data-step]').forEach(b=>b.addEventListener('click',()=>{const i=$(b.dataset.for);i.value=Math.round(((parseFloat(String(i.value).replace(',','.'))||0)+(+b.dataset.step))*100)/100;scheme()}));
+$('saveTool').addEventListener('click',()=>{
+  const t={id:editId||('t'+Date.now()),type:$('tType').value,name:($('tName').value.trim()||TYPES[$('tType').value].n).slice(0,40),hitch:editHitch,
+    w:num('tW',0.5,60,3),a:num('tA',0,15,2.8),b:num('tB',0.1,20,1.5),o:num('tO',-20,20,0)};
+  const i=T.list.findIndex(x=>x.id===t.id);if(i>=0)T.list[i]=t;else T.list.push(t);
+  T.active=t.id;saveTools();resetTrack();toolUi();fitZoom();$('editSheet').hidden=true;$('toolsSheet').hidden=true;toast('Zapisano: '+t.name)});
+$('delTool').addEventListener('click',e=>{const b=e.currentTarget;
+  if(!b.dataset.arm){b.dataset.arm='1';b.textContent='Dotknij ponownie, aby usunąć';return}
+  T.list=T.list.filter(x=>x.id!==editId);if(T.active===editId)T.active=T.list[0].id;saveTools();resetTrack();toolUi();renderTools();$('editSheet').hidden=true});
+$('addTool').addEventListener('click',()=>openEditor(null));
+$('closeTools').addEventListener('click',()=>$('toolsSheet').hidden=true);
+$('closeEdit').addEventListener('click',()=>$('editSheet').hidden=true);
+['toolsSheet','editSheet','settings'].forEach(id=>$(id).addEventListener('click',e=>{if(e.target.id===id)$(id).hidden=true}));
+$('toolBtn').addEventListener('click',openTools);
+$('stChange').addEventListener('click',openTools);
+$('setChange').addEventListener('click',()=>{$('settings').hidden=true;openTools()});
+
+/* main controls */
+$('spray').addEventListener('click',()=>{S.spraying=!S.spraying;sprayUi()});
+$('ab').addEventListener('click',()=>{if(!D.ok||!S.hdgOk){toast('Najpierw podjedź kilka metrów, żeby złapać kierunek jazdy.');return}
+  const p={x:DT.x,y:DT.y};
+  if(!S.A){S.A=p;toast('Punkt A ustawiony. Przejedź pas i ustaw B.')}
+  else if(!S.B){if(Math.hypot(p.x-S.A.x,p.y-S.A.y)<20){toast('Odjedź co najmniej 20 m od punktu A.');return}S.B=p;toast('Linia AB gotowa. Kolejne pasy co '+fmt(tool().w,1)+' m.')}
+  else toast('Linię AB usuniesz w ustawieniach (☰).');
+  abUi();saveSoon()});
 $('menu').addEventListener('click',()=>{$('settings').hidden=false});
 $('closeSet').addEventListener('click',()=>{$('settings').hidden=true});
-$('settings').addEventListener('click',e=>{if(e.target.id==='settings')$('settings').hidden=true});
-$('oHead').addEventListener('click',()=>{S.headUp=true;orientUi();dirty();saveSoon()});
-$('oNorth').addEventListener('click',()=>{S.headUp=false;orientUi();dirty();saveSoon()});
-$('clearAB').addEventListener('click',()=>{S.A=S.B=null;abUi();ui();dirty();saveSoon();toast('Linia AB usunięta.')});
+$('oHead').addEventListener('click',()=>{S.headUp=true;orientUi();saveSoon()});
+$('oNorth').addEventListener('click',()=>{S.headUp=false;orientUi();saveSoon()});
+$('clearAB').addEventListener('click',()=>{S.A=S.B=null;abUi();saveSoon();toast('Linia AB usunięta.')});
 let armT=0;$('newField').addEventListener('click',e=>{const b=e.currentTarget;
-  if(!b.dataset.arm){b.dataset.arm='1';b.innerHTML='Dotknij ponownie<small>aby skasować pole</small>';clearTimeout(armT);armT=setTimeout(()=>{delete b.dataset.arm;b.innerHTML='Nowe pole<small>kasuje opryskany obszar</small>'},3000);return}
-  delete b.dataset.arm;b.innerHTML='Nowe pole<small>kasuje opryskany obszar</small>';
-  const last=S.cur;S.pts=last?[{x:last.x,y:last.y,h:S.heading,w:S.W,on:false,t:Date.now()/1000}]:[];S.A=S.B=null;rebuild();abUi();ui();dirty();save();$('settings').hidden=true;toast('Nowe pole rozpoczęte.')});
-$('zin').addEventListener('click',()=>{S.zoom=Math.min(40,S.zoom*1.4);dirty()});
-$('zout').addEventListener('click',()=>{S.zoom=Math.max(0.15,S.zoom/1.4);dirty()});
-$('center').addEventListener('click',()=>{S.follow=true;$('center').classList.add('active');dirty()});
+  if(!b.dataset.arm){b.dataset.arm='1';b.innerHTML='Dotknij ponownie<small>aby skasować pole</small>';clearTimeout(armT);armT=setTimeout(()=>{delete b.dataset.arm;b.innerHTML='Nowe pole<small>kasuje zrobiony obszar</small>'},3000);return}
+  delete b.dataset.arm;b.innerHTML='Nowe pole<small>kasuje zrobiony obszar</small>';
+  S.pts=[];S.A=S.B=null;S.breakNext=true;rebuild();abUi();ui();save();$('settings').hidden=true;toast('Nowe pole rozpoczęte.')});
+$('zin').addEventListener('click',()=>{S.zoom=Math.min(40,S.zoom*1.4)});
+$('zout').addEventListener('click',()=>{S.zoom=Math.max(0.15,S.zoom/1.4)});
+$('center').addEventListener('click',()=>{S.follow=true;$('center').classList.add('active')});
 
 /* pan & pinch */
 const ptr=new Map();let pinch0=0,zoom0=0;
 canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);ptr.set(e.pointerId,{x:e.clientX,y:e.clientY});
   if(ptr.size===2){const [a,b]=[...ptr.values()];pinch0=Math.hypot(a.x-b.x,a.y-b.y);zoom0=S.zoom}});
 canvas.addEventListener('pointermove',e=>{const p=ptr.get(e.pointerId);if(!p)return;
-  if(ptr.size===2){p.x=e.clientX;p.y=e.clientY;const [a,b]=[...ptr.values()];S.zoom=Math.max(.15,Math.min(40,zoom0*Math.hypot(a.x-b.x,a.y-b.y)/pinch0));dirty();return}
+  if(ptr.size===2){p.x=e.clientX;p.y=e.clientY;const [a,b]=[...ptr.values()];S.zoom=Math.max(.15,Math.min(40,zoom0*Math.hypot(a.x-b.x,a.y-b.y)/pinch0));return}
   const dx=e.clientX-p.x,dy=e.clientY-p.y;p.x=e.clientX;p.y=e.clientY;if(Math.abs(dx)+Math.abs(dy)<1)return;
   if(S.follow){S.follow=false;$('center').classList.remove('active')}
-  const r=rot(),c=Math.cos(r),s=Math.sin(r),wx=(dx*c+dy*s)/S.zoom,wy=-(-dx*s+dy*c)/S.zoom;S.cam.x-=wx;S.cam.y-=wy;dirty()});
+  const r=rot(),c=Math.cos(r),sn=Math.sin(r);S.cam.x-=(dx*c+dy*sn)/S.zoom;S.cam.y+=(-dx*sn+dy*c)/S.zoom});
 ['pointerup','pointercancel'].forEach(ev=>canvas.addEventListener(ev,e=>ptr.delete(e.pointerId)));
-canvas.addEventListener('wheel',e=>{e.preventDefault();S.zoom=Math.max(.15,Math.min(40,S.zoom*(e.deltaY<0?1.15:1/1.15)));dirty()},{passive:false});
+canvas.addEventListener('wheel',e=>{e.preventDefault();S.zoom=Math.max(.15,Math.min(40,S.zoom*(e.deltaY<0?1.15:1/1.15)))},{passive:false});
 
 /* wake lock */
-let wl=null;async function wake(){try{if('wakeLock' in navigator&&document.visibilityState==='visible')wl=await navigator.wakeLock.request('screen')}catch(e){}}
+async function wake(){try{if('wakeLock' in navigator&&document.visibilityState==='visible')await navigator.wakeLock.request('screen')}catch(e){}}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')wake();else save()});
 
 /* start */
-const saved=load();
-if(saved){S.W=saved.W||10;S.origin=saved.origin;S.pts=saved.pts||[];S.A=saved.A;S.B=saved.B;S.headUp=saved.headUp!==false;rebuild();$('resumeNote').hidden=false;
-  const l=S.pts[S.pts.length-1];if(l){S.cur={x:l.x,y:l.y};S.heading=l.h;D.x=F.x=l.x;D.y=F.y=l.y;D.h=l.h;D.ok=true}}
-widthUi();orientUi();abUi();sprayUi();ui();
-function begin(){S.W=Math.max(1,+$('w0').value||10);widthUi();$('start').hidden=true;S.started=true;wake();dirty()}
+const saved=lsGet(KEY);
+if(saved&&saved.origin){S.origin=saved.origin;S.pts=saved.pts||[];S.A=saved.A;S.B=saved.B;S.headUp=saved.headUp!==false;rebuild();$('resumeNote').hidden=!S.pts.length;S.breakNext=true;
+  const l=S.pts[S.pts.length-1];if(l){S.cam.x=l.x;S.cam.y=l.y}}
+toolUi();orientUi();abUi();sprayUi();ui();
+function begin(){$('start').hidden=true;S.started=true;resize();fitZoom();wake()}
 $('goGps').addEventListener('click',()=>{begin();startGps()});
-$('goDemo').addEventListener('click',()=>{begin();S.zoom=3;startDemo();toast('Demo: belka włącza się sama na prostych, nawroty bez oprysku.')});
+$('goDemo').addEventListener('click',()=>{begin();startDemo();toast('Steruj strzałkami ◀ ▶, prędkość ▲ ▼. Włącz pracę przyciskiem na środku.')});
 addEventListener('resize',resize);resize();requestAnimationFrame(frame);
+if('serviceWorker' in navigator&&window.isSecureContext&&!window.AppUpdate){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 
 /* in-app update (only inside the Android app) */
 const AU=window.AppUpdate;let updState='idle';
 function updSet(text,btn,state){$('updText').textContent=text;$('updBtn').textContent=btn;updState=state;$('updBtn').classList.toggle('go',state==='ready')}
-window.saveNow=save;
+window.saveNow=()=>{save();saveTools()};
 if(AU){$('updBox').hidden=false;updSet('Zainstalowana wersja '+AU.versionName(),'Sprawdź','idle');setTimeout(()=>{try{AU.check(true)}catch(e){}},4000)}
 $('updBtn').addEventListener('click',()=>{if(!AU)return;
-  if(updState==='ready'){save();updSet('Pobieranie… 0%','Czekaj','dl');$('updFill').style.width='0';$('updBar').hidden=false;AU.install()}
+  if(updState==='ready'){save();saveTools();updSet('Pobieranie… 0%','Czekaj','dl');$('updFill').style.width='0';$('updBar').hidden=false;AU.install()}
   else if(updState==='idle'){updSet('Sprawdzam…','Czekaj','checking');AU.check(false)}});
 window.onUpdateInfo=(avail,cur,latest,quiet)=>{
-  if(avail){updSet('Dostępna wersja 1.'+latest+' (masz 1.'+cur+'). Pole zostanie zachowane.','Zainstaluj','ready');$('menu').classList.add('badge');if(quiet)toast('Jest nowa wersja aplikacji. Zainstalujesz ją w ustawieniach (☰).')}
+  if(avail){updSet('Dostępna wersja 1.'+latest+' (masz 1.'+cur+'). Pole i sprzęt zostaną zachowane.','Zainstaluj','ready');$('menu').classList.add('badge');if(quiet)toast('Jest nowa wersja aplikacji. Zainstalujesz ją w ustawieniach (☰).')}
   else updSet('Masz najnowszą wersję (1.'+cur+')','Sprawdź','idle')};
 window.onUpdateProgress=p=>{$('updFill').style.width=p+'%';
   if(p>=100){updSet('Otwieram instalator. Potwierdź „Aktualizuj”.','Zainstaluj','ready');$('updBar').hidden=true}else $('updText').textContent='Pobieranie… '+p+'%'};
-window.onUpdateError=m=>{$('updBar').hidden=true;updSet(m,updState==='dl'||updState==='ready'?'Zainstaluj':'Sprawdź',updState==='dl'||updState==='ready'?'ready':'idle')};
-if('serviceWorker' in navigator&&window.isSecureContext){navigator.serviceWorker.register('sw.js').catch(()=>{})}
+window.onUpdateError=m=>{$('updBar').hidden=true;const r=updState==='dl'||updState==='ready';updSet(m,r?'Zainstaluj':'Sprawdź',r?'ready':'idle')};
 })();
 </script>
 </body>
