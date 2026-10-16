@@ -117,6 +117,18 @@
       <input id="byk" autocomplete="off" list="bykList" placeholder="nazwa lub numer byka">
     </label>
     <datalist id="bykList"></datalist>
+    <details class="z2" id="z2Box">
+      <summary>+ Drugie zacielenie <small>(gdy wróciła ruja, opcjonalnie)</small></summary>
+      <div class="z2body">
+        <label for="zacielenie2">Data drugiego zacielenia
+          <input id="zacielenie2" type="date">
+        </label>
+        <label for="byk2">Drugie nasienie / byk
+          <input id="byk2" autocomplete="off" list="bykList" placeholder="nazwa lub numer byka">
+        </label>
+        <p class="hint">Termin porodu liczy się od pierwszego zacielenia (wcześniejszy – bezpieczniej). Przy wycieleniu aplikacja sama sprawdzi, który byk pasuje.</p>
+      </div>
+    </details>
     <div class="row2">
       <label for="cielnaSel">Cielność
         <select id="cielnaSel"><option value="">nie sprawdzono</option><option value="tak">cielna ✓</option><option value="nie">niecielna</option></select>
@@ -137,6 +149,7 @@
       </label>
     </div>
     <div class="due"><span>Termin porodu<br>(+280 dni)</span><b id="dueOut">—</b></div>
+    <div class="preview" id="due2Row" hidden><span>Termin z 2. zacielenia</span><b id="due2Out">—</b></div>
     <div class="preview"><span>Sprawdzić cielność</span><b id="checkOut">—</b></div>
     <div class="preview"><span>Zasuszyć</span><b id="dryOut">—</b></div>
     <div class="preview"><span>Przegnać na porodówkę</span><b id="moveOut">—</b></div>

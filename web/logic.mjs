@@ -33,7 +33,18 @@ export function pregnant(c) {
 export const due = (c) => (pregnant(c) ? addDays(c.zacielenie, GESTATION) : null);
 export const dryDate = (c, cfg) => { const d = due(c); return d ? addDays(d, -cfg.dry) : null; };
 export const moveDate = (c, cfg) => { const d = due(c); return d ? addDays(d, -cfg.move) : null; };
-export const checkDate = (c, cfg) => (pregnant(c) && !c.cielna ? addDays(c.zacielenie, cfg.check) : null);
+export const checkDate = (c, cfg) => (pregnant(c) && !c.cielna ? addDays(c.zacielenie2 || c.zacielenie, cfg.check) : null);
+/** Drugie zacielenie (powtórka po rui): drugi możliwy termin porodu. */
+export const due2 = (c) => (pregnant(c) && c.zacielenie2 ? addDays(c.zacielenie2, GESTATION) : null);
+/** Po którym byku cielę: termin bliższy dniu wycielenia. */
+export function guessSire(c, date) {
+  if (!c.zacielenie) return null;
+  const d1 = addDays(c.zacielenie, GESTATION);
+  if (!c.zacielenie2) return { byk: c.byk || "", which: 1 };
+  const d2 = addDays(c.zacielenie2, GESTATION);
+  const which = Math.abs(daysBetween(d2, date)) < Math.abs(daysBetween(d1, date)) ? 2 : 1;
+  return { byk: (which === 2 ? c.byk2 : c.byk) || "", which, d1, d2 };
+}
 export function nextRuja(c, today = todayISO()) {
   if (!c.ruja || (c.cielna === "tak" && pregnant(c))) return null;
   let r = addDays(c.ruja, CYCLE);
@@ -47,9 +58,11 @@ export function nextRuja(c, today = todayISO()) {
 export function rujaQueue(cows, today = todayISO()) {
   const out = [];
   for (const c of cows) {
-    if (pregnant(c)) continue;
-    for (const date of [c.ruja, nextRuja(c, today)]) {
+    if (pregnant(c) && c.cielna === "tak") continue;
+    const zac = pregnant(c); // zacielona, niezbadana: tylko wpisana ruja (wróciła) wrzuca na listę
+    for (const date of zac ? [c.ruja] : [c.ruja, nextRuja(c, today)]) {
       if (!date) continue;
+      if (c.zacielenie2 && c.zacielenie2 >= date) continue;
       const n = daysBetween(today, date);
       if (n > 1 || n < -2) continue;
       if (c.kolejkaRuja === date || (c.zacielenie && c.zacielenie >= date)) continue;

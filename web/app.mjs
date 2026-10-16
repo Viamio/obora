@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "3.5";
+export const APP_VERSION = "3.6";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -97,7 +97,7 @@ function autoQueue() {
   }
   for (const q of queue) {
     const a = findAnimal(q.kolczyk);
-    if (a && a.zacielenie && q.dodano && a.zacielenie >= q.dodano && L.pregnant(a) && !autoDone.has("del" + q.id)) {
+    if (a && a.zacielenie && q.dodano && (a.zacielenie2 || a.zacielenie) >= q.dodano && L.pregnant(a) && !autoDone.has("del" + q.id)) {
       autoDone.add("del" + q.id);
       deleteDoc(doc(queueCol(farm), q.id)).catch(() => {});
     }
@@ -539,7 +539,7 @@ function alertsSection(v, cs, ks, title = "Do zrobienia") {
     const head = el("div", "ahead"); head.append(tagEl(c), x);
     row.append(head, t, ab);
     const upd = a.calf ? (ch, msg) => { writeCalf(c.id, { ...rowData(c), ...ch }); status(msg); } : (ch, msg) => patch(c, ch, msg);
-    const zacielona = () => { openCow(c, { zacielenie: today, ruja: today }); status("Wpisz, jakim bykiem zacielona, i naciśnij Zapisz."); setTimeout(() => $("byk").focus(), 50); };
+    const zacielona = () => insemCow(c, today);
     if (a.kind === "check") ab.append(btn("Cielna", "okbtn", () => upd({ cielna: "tak" }, `${c.kolczyk}: cielna`)), btn("Niecielna", "nobtn", () => upd({ cielna: "nie" }, `${c.kolczyk}: niecielna`)));
     if (a.kind === "dry") ab.append(btn("Zasuszona", "okbtn", () => openDry(c)));
     if (a.kind === "move") ab.append(btn("Przegnana", "okbtn", () => upd({ przegnana: true }, `${c.kolczyk}: na porodówce`)));
@@ -607,15 +607,15 @@ function cowCard(c) {
   const dl = el("dl");
   const items = [
     ["Po byku", c.ojciec || "—"],
-    ["Zacielona bykiem", c.byk || "—"],
-    [c.wytrucie && c.wytrucie === c.wycielenie ? "Wytrucie" : "Ost. wycielenie", L.fmt(c.wycielenie)],
+    ["Zacielona bykiem", (c.byk || "—") + (c.zacielenie2 ? ` / 2.: ${c.byk2 || "—"}` : "")],
+    [c.wytrucie && c.wytrucie === c.wycielenie ? "Wytrucie" : "Ost. wycielenie", L.fmt(c.wycielenie) + (c.ostatniByk && c.wycielenie ? ` (po ${c.ostatniByk})` : "")],
     ["Ostatnia ruja", L.fmt(c.ruja)],
     ["Następna ruja", L.fmt(L.nextRuja(c, today))],
-    ["Zacielenie", L.fmt(c.zacielenie)],
+    ["Zacielenie", L.fmt(c.zacielenie) + (c.zacielenie2 ? ` i ${L.fmt(c.zacielenie2)}` : "")],
     ["Sprawdzić cielność", L.fmt(L.checkDate(c, cfg))],
     ["Zasuszenie", c.zasuszona ? antNode([c.zasuszonaData ? L.fmt(c.zasuszonaData) : "zrobione", c.antybiotyk].filter(Boolean).join(" · "), c.antybiotyk ? c.karencja : 0) : L.fmt(L.dryDate(c, cfg))],
     ["Na porodówkę", c.przegnana ? "zrobione" : L.fmt(L.moveDate(c, cfg))],
-    ["Termin porodu", L.fmt(due)],
+    ["Termin porodu", L.fmt(due) + (L.due2(c) ? ` lub ${L.fmt(L.due2(c))}` : "")],
   ];
   const kids = childrenOf(c);
   if (kids.length) items.push(["Cielęta", kids.map((k) => `${k.kolczyk}${k.nazwa ? " " + k.nazwa : ""}${k.urodzona ? ` (${L.fmt(k.urodzona)})` : ""}`).join(", ")]);
@@ -696,6 +696,23 @@ function withPhoto(top, a) {
   card.style.setProperty("--photo", `url("${url}")`);
 }
 
+/** Zacielenie krowy dziś. Gdy niedawno zacielona i wróciła ruja → drugie zacielenie (pierwsze zostaje). */
+function isReInsem(c, date) {
+  if (!c.zacielenie || c.zacielenie2 || c.cielna === "tak" || !L.pregnant(c)) return false;
+  const n = L.daysBetween(c.zacielenie, date);
+  return n >= 5 && n <= 60;
+}
+function insemCow(c, date, extra = {}) {
+  if (isReInsem(c, date)) {
+    openCow(c, { zacielenie2: date, ruja: date, ...extra });
+    status(`Druga inseminacja (pierwsza ${L.fmt(c.zacielenie)} zostaje). Wpisz drugie nasienie i naciśnij Zapisz.`);
+    setTimeout(() => $("byk2").focus(), 50);
+  } else {
+    openCow(c, { zacielenie: date, ruja: date, ...extra });
+    status("Wpisz, jakim bykiem zacielona, i naciśnij Zapisz.");
+    setTimeout(() => $("byk").focus(), 50);
+  }
+}
 /** Zacielenie jałówki: zostaje w jałówkach, formularz z dzisiejszą datą. */
 function heiferInsem(c, date) {
   openCalf(c);
@@ -727,7 +744,7 @@ const DAY_MS = 24 * 3600 * 1000;
 let grp = null, undoing = false;
 /** Wszystkie zapisy z jednego stuknięcia trafiają do jednej grupy (cofane razem). */
 function group() { if (!grp) { grp = newId("g"); queueMicrotask(() => { grp = null; }); } return grp; }
-const LABELS = { kolczyk: "kolczyk", nazwa: "nazwa", miejsce: "miejsce", ojciec: "ojciec", wycielenie: "wycielenie", ruja: "ruja", zacielenie: "zacielenie",
+const LABELS = { kolczyk: "kolczyk", nazwa: "nazwa", zacielenie2: "2. zacielenie", byk2: "2. byk", miejsce: "miejsce", ojciec: "ojciec", wycielenie: "wycielenie", ruja: "ruja", zacielenie: "zacielenie",
   byk: "byk", cielna: "cielność", zasuszona: "zasuszenie", zasuszonaData: "data zasuszenia", antybiotyk: "antybiotyk", karencja: "karencja",
   karencjaOk: "karencja", karencjaKoniec: "karencja", przegnana: "porodówka", foto: "zdjęcie", ukryj: "ukryte zadanie", wytrucie: "wytrucie",
   urodzona: "data urodzenia", plec: "płeć", typ: "typ", matka: "matka" };
@@ -950,6 +967,10 @@ function updatePreview() {
   $("dryOut").textContent = due ? `${L.fmt(L.addDays(due, -cfg.dry))} (${cfg.dry} dni przed)` : "—";
   $("moveOut").textContent = due ? `${L.fmt(L.addDays(due, -cfg.move))} (${cfg.move} dni przed)` : "—";
   $("rujaOut").textContent = r ? L.fmt(L.addDays(r, L.CYCLE)) : "—";
+  const z2 = $("zacielenie2").value;
+  $("due2Row").hidden = !z2;
+  $("due2Out").textContent = z2 ? L.fmt(L.addDays(z2, L.GESTATION)) : "—";
+  if (z2) $("checkOut").textContent = `${L.fmt(L.addDays(z2, cfg.check))} (+${cfg.check} dni od 2. zacielenia)`;
 }
 let editSeed = null;   // dane krowy, która jeszcze nie dotarła z bazy (np. właśnie przeniesiona jałówka)
 function openCow(c, preset = {}) {
@@ -966,6 +987,11 @@ function openCow(c, preset = {}) {
   $("cielnaSel").value = c && !(preset.zacielenie && preset.zacielenie !== c.zacielenie) ? (c.cielna || "") : "";
   $("zasData").value = v.zasuszona ? (v.zasuszonaData || "") : "";
   $("byk").value = c && preset.zacielenie && preset.zacielenie !== c.zacielenie ? "" : (v.byk || "");
+  const fresh = c && preset.zacielenie && preset.zacielenie !== c.zacielenie;
+  $("zacielenie2").value = fresh ? "" : (v.zacielenie2 || "");
+  $("byk2").value = fresh || (preset.zacielenie2 && preset.zacielenie2 !== c?.zacielenie2) ? "" : (v.byk2 || "");
+  if (preset.zacielenie2) $("cielnaSel").value = "";
+  $("z2Box").open = !!$("zacielenie2").value;
   placeSelect($("miejsce"), preset.miejsce != null ? preset.miejsce : c ? placeOf(c) : currentPlace());
   photoUi("k", c ? photoFor(c) : null);
   updatePreview();
@@ -978,7 +1004,8 @@ function openCow(c, preset = {}) {
   if (!c) $("kolczyk").focus();
 }
 const cowTag = tagAssist($("kolczyk"), { selfId: () => editId, saveBtn: $("saveBtn") });
-["zacielenie", "ruja"].forEach((id) => $(id).addEventListener("input", updatePreview));
+["zacielenie", "ruja", "zacielenie2"].forEach((id) => $(id).addEventListener("input", updatePreview));
+$("zacielenie2").addEventListener("input", () => { $("cielnaSel").value = ""; });
 $("zacielenie").addEventListener("input", () => { $("cielnaSel").value = ""; });
 $("cancelBtn").onclick = () => { editId = null; $("cowDlg").close(); };
 $("cowDlg").addEventListener("close", () => { editId = null; editSeed = null; queueDoneId = null; });
@@ -990,11 +1017,15 @@ $("form").addEventListener("submit", (e) => {
   const ojciec = $("ojciec").value.trim(), byk = $("byk").value.trim(), miejsce = $("miejsce").value, antybiotyk = $("antybiotyk").value.trim();
   if (!kolczyk) return showErr("Wpisz numer kolczyka.");
   { const own = tagOwner(kolczyk, editId); if (own) return showErr(`Ten kolczyk już jest: ${own.kolczyk} (${animalDesc(own)}).`); }
+  const zacielenie2 = zacielenie ? $("zacielenie2").value : "";
+  if (zacielenie2 && zacielenie2 <= zacielenie) return showErr("Drugie zacielenie musi być później niż pierwsze.");
+  if (zacielenie2 && zacielenie2 > L.todayISO()) return showErr("Data drugiego zacielenia nie może być z przyszłości.");
   const old = cows.find((c) => c.id === editId) || (editId ? editSeed : null);
   const same = old && old.zacielenie === zacielenie;
   const data = {
     ...(old ? rowData(old) : {}),
     kolczyk, nazwa: $("nazwa").value.trim(), miejsce, ojciec, wycielenie, ruja, zacielenie, byk: zacielenie ? byk : "",
+    zacielenie2, byk2: zacielenie2 ? $("byk2").value.trim() : "",
     cielna: zacielenie ? $("cielnaSel").value : "",
     zasuszona: !!$("zasData").value || (same ? !!old.zasuszona : false) || !!antybiotyk,
     przegnana: same ? !!old.przegnana : false,
@@ -1337,11 +1368,9 @@ function inseminate(q) {
   const a = findAnimal(q.kolczyk);
   queueDoneId = q.id;
   const preset = { zacielenie: today, ruja: today, miejsce: q.miejsce || (a ? placeOf(a) : "") };
-  if (a && cows.includes(a)) openCow(a, preset);
+  if (a && cows.includes(a)) insemCow(a, today, { miejsce: preset.miejsce });
   else if (a) heiferInsem(a, today);
-  else openCow(null, { ...preset, kolczyk: q.kolczyk });
-  status("Wpisz, jakim bykiem zacielona, i naciśnij Zapisz.");
-  setTimeout(() => $("byk").focus(), 60);
+  else { openCow(null, { ...preset, kolczyk: q.kolczyk }); status("Wpisz, jakim bykiem zacielona, i naciśnij Zapisz."); setTimeout(() => $("byk").focus(), 60); }
 }
 
 // ---------------- wycielenie i karencja ----------------
@@ -1363,8 +1392,10 @@ for (const [antId, karId] of [["dryAnt", "dryKar"], ["antybiotyk", "karencja"]])
 /** Zmiany przy wycieleniu: nowy cykl + wyliczenie końca karencji z antybiotyku z zasuszenia. */
 function calvingChanges(c, date) {
   const koniec = c.zasuszona ? L.withdrawalEnd(c, date) : "";
+  const g = L.guessSire(c, date);
   return {
-    wycielenie: date, zacielenie: "", byk: "", ruja: "", cielna: "", przegnana: false,
+    ostatniByk: g?.byk || "", ostatniByk2: !!(g && g.which === 2),
+    wycielenie: date, zacielenie: "", byk: "", zacielenie2: "", byk2: "", ruja: "", cielna: "", przegnana: false,
     zasuszona: false, zasuszonaData: "", antybiotyk: "", karencja: 0, karencjaOd: "",
     karencjaKoniec: koniec, karencjaLek: koniec ? (c.antybiotyk || "") : "", karencjaDni: koniec ? Number(c.karencja) || 0 : 0, karencjaOk: false,
   };
@@ -1396,6 +1427,11 @@ function updateMotherInfo() {
   if (!m) return;
   $("cMotherInfo").textContent = `Matka: ${m.kolczyk}${m.nazwa ? " " + m.nazwa : ""} – ${animalKind(m)}${m.wycielenie ? `, ost. wycielenie ${L.fmt(m.wycielenie)}` : ""}.`;
   const p = motherPlan(m, date);
+  // ojciec cielęcia: byk matki (przy dwóch zacieleniach – ten, którego termin pasuje)
+  const g = p && !p.skip ? L.guessSire(m, date) : (m.wycielenie === date && m.ostatniByk ? { byk: m.ostatniByk } : null);
+  const oj = $("cOjciec");
+  if (g?.byk && (!oj.value || oj.dataset.auto)) { oj.value = g.byk; oj.dataset.auto = "1"; }
+  if (g?.byk && g.which && m.zacielenie2) $("cMotherInfo").textContent += ` Dwa zacielenia – bliżej terminu z ${g.which}. (${L.fmt(g.which === 2 ? g.d2 : g.d1)}), więc ojciec: ${g.byk}.`;
   $("cMotherChkL").hidden = !p || !!p.skip;
   if (p?.skip) $("cMotherInfo").textContent += " " + p.skip;
   else if (p) $("cMotherChkT").textContent = p.heifer ? `Wpisz jej wycielenie ${L.fmt(date)} i przenieś do krów` : `Wpisz matce wycielenie ${L.fmt(date)}` + (p.onlyDate ? "" : " (terminy od nowa)");
@@ -1403,7 +1439,8 @@ function updateMotherInfo() {
 function calved(c, date) {
   const ch = calvingChanges(c, date);
   const n = ch.karencjaKoniec ? L.daysBetween(L.todayISO(), ch.karencjaKoniec) : 0;
-  patch(c, ch, `${c.kolczyk}: wycielenie zapisane` + (ch.karencjaKoniec ? (n > 0 ? ` – karencja jeszcze ${L.dni(n)}, do ${L.fmt(ch.karencjaKoniec)}` : " – karencja już minęła, można doić") : ""));
+  const g = c.zacielenie2 ? L.guessSire(c, date) : null;
+  patch(c, ch, `${c.kolczyk}: wycielenie zapisane` + (g ? ` – bliżej terminu z ${g.which}. zacielenia, cielę po: ${g.byk || "?"}` : "") + (ch.karencjaKoniec ? (n > 0 ? ` – karencja jeszcze ${L.dni(n)}, do ${L.fmt(ch.karencjaKoniec)}` : " – karencja już minęła, można doić") : ""));
 }
 
 // ---------------- zasuszenie ----------------
@@ -1497,6 +1534,7 @@ function openCalf(c, mode) {
   armAbort("cAbortBtn", "cAbortHint", "Jałówka przejdzie do krów jak po wycieleniu – terminy liczą się od dziś.");
   $("cAbortBox").hidden = !(c && calfMode === "jalowka");
   updateCalfPreview();
+  delete $("cOjciec").dataset.auto;
   $("cMotherChk").checked = true; updateMotherInfo();
   calfTag.reset();
   $("calfDlg").showModal();
@@ -1510,6 +1548,7 @@ $("cWiek").addEventListener("input", () => {
 });
 $("cUrodzona").addEventListener("input", () => { $("cWiek").value = ""; updateCalfPreview(); updateMotherInfo(); });
 $("cMatka").addEventListener("input", updateMotherInfo);
+$("cOjciec").addEventListener("input", () => { delete $("cOjciec").dataset.auto; });
 tagAssist($("cMatka"), { dupError: false, onPick: (a) => { $("cMatka").value = a.kolczyk; $("cMatka").dispatchEvent(new Event("input")); } });
 ["cJ", "cB", "cCielna"].forEach((id) => $(id).addEventListener("change", updateCalfPreview));
 $("cZacielenie").addEventListener("input", () => { $("cCielna").value = ""; updateCalfPreview(); });
