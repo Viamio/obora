@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "3.7";
+export const APP_VERSION = "3.8";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -548,7 +548,7 @@ function alertsSection(v, cs, ks, title = "Do zrobienia") {
     if (a.kind === "check") ab.append(btn("Cielna", "okbtn", () => upd({ cielna: "tak" }, `${c.kolczyk}: cielna`)), btn("Niecielna", "nobtn", () => upd({ cielna: "nie" }, `${c.kolczyk}: niecielna`)));
     if (a.kind === "dry") ab.append(btn("Zasuszona", "okbtn", () => openDry(c)));
     if (a.kind === "move") ab.append(btn("Przegnana", "okbtn", () => upd({ przegnana: true }, `${c.kolczyk}: na porodówce`)));
-    if (a.kind === "ruja") ab.append(btn("Grzeje się dziś", "nobtn", () => patch(c, { ruja: today }, `${c.kolczyk}: ruja zapisana`)), btn("Zacielona dziś", "okbtn", zacielona));
+    if (a.kind === "ruja") ab.append(btn("Grzeje się dziś", "nobtn", () => upd({ ruja: today }, `${c.kolczyk}: ruja zapisana`)), btn("Zacielona dziś", "okbtn", a.calf ? () => heiferInsem(c, today) : zacielona));
     if (a.kind === "insem") ab.append(btn("Zacielona dziś", "okbtn", zacielona));
     if (a.kind === "due") ab.append(btn("Wycieliła się", "okbtn", () => a.calf ? toHerd(c, { wycielenie: today }) : calved(c, today)));
     if (a.kind === "karencjaOk") ab.append(btn("OK, doję", "okbtn", () => patch(c, { karencjaOk: true }, `${c.kolczyk}: karencja zakończona`)));

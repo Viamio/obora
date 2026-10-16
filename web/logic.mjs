@@ -45,9 +45,16 @@ export function guessSire(c, date) {
   const which = Math.abs(daysBetween(d2, date)) < Math.abs(daysBetween(d1, date)) ? 2 : 1;
   return { byk: (which === 2 ? c.byk2 : c.byk) || "", which, d1, d2 };
 }
+/** Od czego liczyć ruję: najpóźniejsza z rui i zacieleń (zacielenie jest w rui), po ostatnim wycieleniu. */
+export function rujaBase(c) {
+  const d = [c.ruja, c.zacielenie, c.zacielenie2].filter((x) => x && (!c.wycielenie || x > c.wycielenie)).sort();
+  return d.length ? d[d.length - 1] : (c.ruja || null);
+}
+/** Następna ruja co 21 dni. Po potwierdzeniu ciąży – brak. */
 export function nextRuja(c, today = todayISO()) {
-  if (!c.ruja || (c.cielna === "tak" && pregnant(c))) return null;
-  let r = addDays(c.ruja, CYCLE);
+  const base = rujaBase(c);
+  if (!base || (c.cielna === "tak" && pregnant(c))) return null;
+  let r = addDays(base, CYCLE);
   while (r < today) r = addDays(r, CYCLE);
   return r;
 }
@@ -82,6 +89,12 @@ export function insemDate(c, cfg) {
 /** Zadanie ukryte krzyżykiem – wraca dopiero, gdy zmieni się jego termin (nowy cykl). */
 export const hidden = (c, kind, date) => !!(c.ukryj && c.ukryj[kind] === date);
 
+function rujaSub(c, today) {
+  const base = rujaBase(c), r = nextRuja(c, today);
+  const odZac = base && (base === c.zacielenie || base === c.zacielenie2) && base !== c.ruja;
+  const k = Math.round(daysBetween(base, r) / CYCLE);
+  return `${fmt(r)} (${k > 1 ? `${k}×21` : "21"} dni od ${odZac ? "zacielenia" : "ostatniej rui"})`;
+}
 /** Lista zadań posortowana od najpilniejszych. */
 export function alerts(cows, cfg, ahead, dueAhead, today = todayISO()) {
   const out = [];
@@ -93,7 +106,7 @@ export function alerts(cows, cfg, ahead, dueAhead, today = todayISO()) {
   };
   for (const c of cows) {
     push(c, "insem", insemDate(c, cfg), "Zacielić", `Gotowa od ${fmt(insemDate(c, cfg))} (${cfg.vwp} dni po wycieleniu)`);
-    push(c, "ruja", nextRuja(c, today), pregnant(c) ? "Sprawdź, czy nie wróciła ruja" : "Ruja – może biegać, do zacielenia", `${fmt(nextRuja(c, today))} (21 dni od poprzedniej)`);
+    push(c, "ruja", nextRuja(c, today), pregnant(c) ? "Jeśli się nie zacieliła – może biegać" : "Ruja – może biegać, do zacielenia", rujaSub(c, today));
     push(c, "check", checkDate(c, cfg), "Sprawdzić czy cielna", `${fmt(checkDate(c, cfg))} (${cfg.check} dni po zacieleniu)`);
     if (!c.zasuszona) push(c, "dry", dryDate(c, cfg), "Zasuszyć", `${fmt(dryDate(c, cfg))} (${cfg.dry} dni przed porodem)`);
     if (!c.przegnana) push(c, "move", moveDate(c, cfg), "Przegnać na porodówkę", `${fmt(moveDate(c, cfg))} (${cfg.move} dni przed porodem)`);
@@ -162,6 +175,7 @@ export function calfAlerts(calves, cfg, ahead, today = todayISO(), dueAhead) {
   for (const c of calves) {
     // zacielona jałówka: badanie cielności, porodówka, wycielenie (bez zasuszania)
     if (c.zacielenie && c.cielna !== "nie") {
+      if (c.cielna !== "tak") push(c, "ruja", nextRuja(c, today), "Jeśli się nie zacieliła – może biegać", rujaSub(c, today));
       push(c, "check", checkDate(c, cfg), "Sprawdzić czy cielna", `${fmt(checkDate(c, cfg))} (${cfg.check} dni po zacieleniu)`);
       if (!c.przegnana) push(c, "move", moveDate(c, cfg), "Przegnać na porodówkę", `${fmt(moveDate(c, cfg))} (${cfg.move} dni przed porodem)`);
       const d = due(c);
