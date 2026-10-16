@@ -222,8 +222,12 @@
       <select id="cMiejsce"></select>
     </label>
     <label for="cMatka">Matka <small>(kolczyk, opcjonalnie)</small>
-      <input id="cMatka" autocomplete="off" list="matkiList" placeholder="kolczyk matki">
+      <input id="cMatka" autocomplete="off" inputmode="numeric" placeholder="kolczyk matki">
     </label>
+    <div class="motherbox" id="cMotherBox" hidden>
+      <p id="cMotherInfo"></p>
+      <label class="chk" id="cMotherChkL"><input type="checkbox" id="cMotherChk" checked> <span id="cMotherChkT">Wpisz matce wycielenie</span></label>
+    </div>
     <datalist id="matkiList"></datalist>
     <label for="cOjciec">Po jakim byku <small>(opcjonalnie)</small>
       <input id="cOjciec" autocomplete="off" list="bykList" placeholder="nazwa lub numer byka">

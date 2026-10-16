@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "3.3";
+export const APP_VERSION = "3.4";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -592,6 +592,8 @@ function cowCard(c) {
     ["Na porodówkę", c.przegnana ? "zrobione" : L.fmt(L.moveDate(c, cfg))],
     ["Termin porodu", L.fmt(due)],
   ];
+  const kids = childrenOf(c);
+  if (kids.length) items.push(["Cielęta", kids.map((k) => `${k.kolczyk}${k.nazwa ? " " + k.nazwa : ""}${k.urodzona ? ` (${L.fmt(k.urodzona)})` : ""}`).join(", ")]);
   for (const [k, val] of items) {
     const w = el("div"), dd = el("dd", k === "Termin porodu" && due ? "big" : null);
     if (val instanceof Node) dd.append(val); else dd.textContent = val;
@@ -909,7 +911,7 @@ function fillLists() {
   $("antList").replaceChildren(...ants.map((n) => { const o = el("option"); o.value = n; if (antDays.get(n)) o.label = `${n} (${antDays.get(n)} dni)`; return o; }));
   const bulls = [...new Set([...cows, ...calves].flatMap((c) => [c.ojciec, c.byk]).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   $("bykList").replaceChildren(...bulls.map((n) => { const o = el("option"); o.value = n; return o; }));
-  $("matkiList").replaceChildren(...cows.map((c) => { const o = el("option"); o.value = c.kolczyk; return o; }));
+  $("matkiList").replaceChildren(...[...cows, ...calves.filter((c) => typOf(c) === "jalowka")].map((c) => { const o = el("option"); o.value = c.kolczyk; if (c.nazwa) o.label = c.nazwa; return o; }));
 }
 
 // ---------------- formularz krowy ----------------
@@ -1341,6 +1343,37 @@ function calvingChanges(c, date) {
     karencjaKoniec: koniec, karencjaLek: koniec ? (c.antybiotyk || "") : "", karencjaDni: koniec ? Number(c.karencja) || 0 : 0, karencjaOk: false,
   };
 }
+/** Cielęta danej matki (po kolczyku matki), najmłodsze pierwsze. */
+const childrenOf = (m) => [...calves, ...cows].filter((x) => x.id !== m.id && x.matka && sameTag(x.matka, m.kolczyk))
+  .sort((a, b) => (b.urodzona || "").localeCompare(a.urodzona || ""));
+/** Matka wpisana przy cielaku: krowa albo jałówka z gospodarstwa. */
+const motherOf = (k, selfId) => (k ? [...cows, ...calves.filter((c) => typOf(c) === "jalowka")].find((a) => a.id !== selfId && sameTag(a.kolczyk, k)) || null : null);
+/** Co zrobić z matką po urodzeniu cielaka w dniu date: null = nic. */
+function motherPlan(m, date) {
+  if (!m || !date) return null;
+  if (m.wycielenie === date) return { skip: "Wycielenie matki z tego dnia już jest wpisane." };
+  if (m.wycielenie && m.wycielenie > date) return { skip: `Matka ma późniejsze wycielenie (${L.fmt(m.wycielenie)}) – zostawiam.` };
+  return { heifer: !cows.includes(m), onlyDate: !!(m.zacielenie && m.zacielenie > date) };
+}
+function applyMother(m, date, calfTag) {
+  const p = motherPlan(m, date);
+  if (!p || p.skip) return "";
+  if (p.heifer) { toHerd(m, { wycielenie: date }); return ` · ${m.kolczyk}: wycielenie ${L.fmt(date)}, przeszła do krów`; }
+  if (p.onlyDate) { patch(m, { wycielenie: date }); return ` · matce ${m.kolczyk} wpisano wycielenie ${L.fmt(date)}`; }
+  const ch = calvingChanges(m, date);
+  writeCow(m.id, { ...rowData(m), ...ch });
+  return ` · matce ${m.kolczyk} wpisano wycielenie ${L.fmt(date)}` + (ch.karencjaKoniec ? ` (karencja do ${L.fmt(ch.karencjaKoniec)})` : "");
+}
+function updateMotherInfo() {
+  const m = motherOf($("cMatka").value.trim(), calfEditId), date = $("cUrodzona").value;
+  $("cMotherBox").hidden = !m;
+  if (!m) return;
+  $("cMotherInfo").textContent = `Matka: ${m.kolczyk}${m.nazwa ? " " + m.nazwa : ""} – ${animalKind(m)}${m.wycielenie ? `, ost. wycielenie ${L.fmt(m.wycielenie)}` : ""}.`;
+  const p = motherPlan(m, date);
+  $("cMotherChkL").hidden = !p || !!p.skip;
+  if (p?.skip) $("cMotherInfo").textContent += " " + p.skip;
+  else if (p) $("cMotherChkT").textContent = p.heifer ? `Wpisz jej wycielenie ${L.fmt(date)} i przenieś do krów` : `Wpisz matce wycielenie ${L.fmt(date)}` + (p.onlyDate ? "" : " (terminy od nowa)");
+}
 function calved(c, date) {
   const ch = calvingChanges(c, date);
   const n = ch.karencjaKoniec ? L.daysBetween(L.todayISO(), ch.karencjaKoniec) : 0;
@@ -1438,6 +1471,7 @@ function openCalf(c, mode) {
   armAbort("cAbortBtn", "cAbortHint", "Jałówka przejdzie do krów jak po wycieleniu – terminy liczą się od dziś.");
   $("cAbortBox").hidden = !(c && calfMode === "jalowka");
   updateCalfPreview();
+  $("cMotherChk").checked = true; updateMotherInfo();
   calfTag.reset();
   $("calfDlg").showModal();
   if (!c) $("cKolczyk").focus();
@@ -1446,9 +1480,11 @@ const calfTag = tagAssist($("cKolczyk"), { selfId: () => calfEditId, saveBtn: $(
 $("cWiek").addEventListener("input", () => {
   const m = parseInt($("cWiek").value, 10);
   if (Number.isFinite(m) && m >= 0) $("cUrodzona").value = L.addMonths(L.todayISO(), -m);
-  updateCalfPreview();
+  updateCalfPreview(); updateMotherInfo();
 });
-$("cUrodzona").addEventListener("input", () => { $("cWiek").value = ""; updateCalfPreview(); });
+$("cUrodzona").addEventListener("input", () => { $("cWiek").value = ""; updateCalfPreview(); updateMotherInfo(); });
+$("cMatka").addEventListener("input", updateMotherInfo);
+tagAssist($("cMatka"), { dupError: false, onPick: (a) => { $("cMatka").value = a.kolczyk; $("cMatka").dispatchEvent(new Event("input")); } });
 ["cJ", "cB", "cCielna"].forEach((id) => $(id).addEventListener("change", updateCalfPreview));
 $("cZacielenie").addEventListener("input", () => { $("cCielna").value = ""; updateCalfPreview(); });
 $("calfCancel").onclick = () => $("calfDlg").close();
@@ -1476,8 +1512,10 @@ $("calfForm").addEventListener("submit", (e) => {
   if (oldC) for (const k of ["ukryj"]) if (oldC[k]) data[k] = oldC[k];
   const kid = calfEditId || newId("c");
   data.foto = savePhoto("c", kid, calves.find((x) => x.id === calfEditId));
+  const mom = motherOf(data.matka, kid);
+  const momMsg = mom && !$("cMotherBox").hidden && !$("cMotherChkL").hidden && $("cMotherChk").checked ? applyMother(mom, urodzona) : "";
   writeCalf(kid, data);
-  status(calfEditId ? `Zapisano: ${kolczyk}` : `Dodano: ${kolczyk}`);
+  status((calfEditId ? `Zapisano: ${kolczyk}` : `Dodano: ${kolczyk}`) + momMsg);
   $("calfDlg").close();
 });
 

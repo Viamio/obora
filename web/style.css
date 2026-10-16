@@ -269,3 +269,4 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .okt{color:var(--accent);font-weight:600;margin:10px 0 0}
 .bkrow{display:flex;flex-direction:column;gap:8px;margin-top:6px}.bkrow>*{width:100%;justify-content:center}
 .insbox{display:flex;flex-direction:column;gap:14px;border-top:1px solid var(--line);padding-top:14px}
+.motherbox{background:var(--ok-bg);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;margin-top:-6px}.motherbox p{margin:0;font-size:.9rem}
