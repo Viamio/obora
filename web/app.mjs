@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "3.4";
+export const APP_VERSION = "3.5";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -81,6 +81,28 @@ const newId = (p) => p + Date.now().toString(36) + Math.random().toString(36).sl
 // ---------------- stan ----------------
 let farm = LS.get("obora_farm");
 let cows = [], calves = [], queue = [], history = [];
+let queueLoaded = false;
+const autoDone = new Set();
+/** Krowa biega (ruja) i jest niecielna → sama trafia na listę „Do zacielenia”. Zacielone znikają z listy. */
+function autoQueue() {
+  if (!farm || !loaded || !queueLoaded) return;
+  const today = L.todayISO();
+  for (const { cow: c, date } of L.rujaQueue(cows, today)) {
+    const key = c.id + date;
+    if (autoDone.has(key)) continue;
+    autoDone.add(key);
+    if (!queue.some((q) => sameTag(q.kolczyk, c.kolczyk)))
+      setDoc(doc(queueCol(farm), L.rujaQueueId(c, date)), { kolczyk: c.kolczyk, miejsce: placeOf(c), dodano: today, zmieniono: Date.now(), auto: "ruja", ruja: date }).catch(() => {});
+    writeCow(c.id, { ...rowData(c), kolejkaRuja: date });
+  }
+  for (const q of queue) {
+    const a = findAnimal(q.kolczyk);
+    if (a && a.zacielenie && q.dodano && a.zacielenie >= q.dodano && L.pregnant(a) && !autoDone.has("del" + q.id)) {
+      autoDone.add("del" + q.id);
+      deleteDoc(doc(queueCol(farm), q.id)).catch(() => {});
+    }
+  }
+}
 let queueDoneId = null;   // wpis z listy „Do zacielenia”, który zniknie po zapisaniu zacielenia
 let cfg = L.cfgOf();
 let cfgLoaded = false;
@@ -135,6 +157,7 @@ function start(code) {
   unsub.push(onSnapshot(cowsCol(code), (snap) => {
     cows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     loaded = true;
+    autoQueue();
     const off = "Bez internetu – zmiany wyślą się później.";
     if (snap.metadata.fromCache) status(off); else if ($("status").textContent === off) status("");
     render();
@@ -146,6 +169,8 @@ function start(code) {
   }, () => {}));
   unsub.push(onSnapshot(queueCol(code), (snap) => {
     queue = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    queueLoaded = !snap.metadata?.fromCache || queueLoaded;
+    autoQueue();
     render();
   }, () => {}));
   unsub.push(onSnapshot(calvesCol(code), (snap) => {
@@ -1281,6 +1306,7 @@ function viewQueue(v) {
     const left = el("div", "cowleft");
     left.append(tagEl(a, q.kolczyk));
     left.append(el("span", "chip", a ? (cows.includes(a) ? "Krowa" : kindLabel(a)) : "Spoza stada"));
+    if (q.auto === "ruja") left.append(el("span", "chip ruja", `Ruja ${q.ruja ? L.fmt(q.ruja).slice(0, 5) : ""}`));
     if (a && L.pregnant(a)) left.append(el("span", "chip no", "Uwaga: cielna"));
     top.append(left, el("span", "pill none", q.dodano ? `dodana ${L.fmt(q.dodano)}` : ""));
     row.append(top);

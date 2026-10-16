@@ -1,6 +1,6 @@
 // Service worker aplikacji Obora: działanie bez internetu, aktualizacje i powiadomienia.
 // Zmiana WERSJA = nowa wersja aplikacji -> na telefonach pojawi się pasek "Aktualizuj".
-const WERSJA = "3.4";
+const WERSJA = "3.5";
 const CACHE = "obora-" + WERSJA;
 const PLIKI = [
   "./", "index.html", "app.mjs", "logic.mjs", "style.css", "config.js", "manifest.webmanifest",

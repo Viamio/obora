@@ -1,7 +1,7 @@
 // Codzienne powiadomienia: uruchamiane co godzinę przez GitHub Actions.
 // Dla każdego gospodarstwa, gdy w Polsce minie ustawiona godzina, wysyła listę zadań na wszystkie telefony.
 import admin from "firebase-admin";
-import { alerts, calfAlerts, cfgOf, todayISO, kiedy, zadania } from "../web/logic.mjs";
+import { alerts, calfAlerts, cfgOf, todayISO, kiedy, zadania, rujaQueue, rujaQueueId } from "../web/logic.mjs";
 
 const APP_URL = process.env.APP_URL || "";
 const FORCE = process.env.WYMUS === "1";
@@ -21,6 +21,15 @@ for (const ref of farms) {
   if (!FORCE && (hourNow < cfg.hour || farm.ostatnio === today)) continue;
 
   const cows = (await ref.collection("krowy").get()).docs.map((d) => ({ id: d.id, ...d.data() }));
+  // krowy w rui i niecielne → same trafiają na listę „Do zacielenia”
+  const queue = (await ref.collection("dozacielenia").get()).docs.map((d) => d.data().kolczyk);
+  for (const { cow: c, date } of rujaQueue(cows, today)) {
+    if (!queue.includes(c.kolczyk))
+      await ref.collection("dozacielenia").doc(rujaQueueId(c, date)).set({ kolczyk: c.kolczyk, miejsce: c.miejsce || "", dodano: today, zmieniono: Date.now(), auto: "ruja", ruja: date });
+    await ref.collection("krowy").doc(c.id).set({ kolejkaRuja: date }, { merge: true });
+    c.kolejkaRuja = date;
+    console.log(`Do zacielenia (ruja): ${c.kolczyk}`);
+  }
   const phones = (await ref.collection("telefony").get()).docs.filter((p) => p.data().token);
   if (!FORCE) await ref.set({ ostatnio: today }, { merge: true });
 

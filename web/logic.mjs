@@ -40,6 +40,26 @@ export function nextRuja(c, today = todayISO()) {
   while (r < today) r = addDays(r, CYCLE);
   return r;
 }
+/**
+ * Niecielne krowy, które biegają teraz (ruja wpisana albo spodziewana: od 1 dnia przed do 2 dni po)
+ * i jeszcze nie trafiły na listę „Do zacielenia” w tej rui. Zwraca [{ cow, date }].
+ */
+export function rujaQueue(cows, today = todayISO()) {
+  const out = [];
+  for (const c of cows) {
+    if (pregnant(c)) continue;
+    for (const date of [c.ruja, nextRuja(c, today)]) {
+      if (!date) continue;
+      const n = daysBetween(today, date);
+      if (n > 1 || n < -2) continue;
+      if (c.kolejkaRuja === date || (c.zacielenie && c.zacielenie >= date)) continue;
+      out.push({ cow: c, date });
+      break;
+    }
+  }
+  return out;
+}
+export const rujaQueueId = (c, date) => `r-${c.id}-${date}`;
 export function insemDate(c, cfg) {
   if (!c.wycielenie) return null;
   if (c.zacielenie && c.zacielenie > c.wycielenie) return null;
@@ -60,7 +80,7 @@ export function alerts(cows, cfg, ahead, dueAhead, today = todayISO()) {
   };
   for (const c of cows) {
     push(c, "insem", insemDate(c, cfg), "Zacielić", `Gotowa od ${fmt(insemDate(c, cfg))} (${cfg.vwp} dni po wycieleniu)`);
-    push(c, "ruja", nextRuja(c, today), "Spodziewana ruja", `${fmt(nextRuja(c, today))} (21 dni od poprzedniej)`);
+    push(c, "ruja", nextRuja(c, today), pregnant(c) ? "Sprawdź, czy nie wróciła ruja" : "Ruja – może biegać, do zacielenia", `${fmt(nextRuja(c, today))} (21 dni od poprzedniej)`);
     push(c, "check", checkDate(c, cfg), "Sprawdzić czy cielna", `${fmt(checkDate(c, cfg))} (${cfg.check} dni po zacieleniu)`);
     if (!c.zasuszona) push(c, "dry", dryDate(c, cfg), "Zasuszyć", `${fmt(dryDate(c, cfg))} (${cfg.dry} dni przed porodem)`);
     if (!c.przegnana) push(c, "move", moveDate(c, cfg), "Przegnać na porodówkę", `${fmt(moveDate(c, cfg))} (${cfg.move} dni przed porodem)`);
