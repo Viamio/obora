@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0e130f">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Prowadzenie GPS</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Layout: full-screen field canvas, lightbar + stats on top, big thumb controls on the bottom (cab-display style) */
+:root{
+  --bg:#0e130f; --panel:#161d17; --line:#2a352b; --fg:#eef3ea; --muted:#93a090;
+  --spray:#6fd66f; --overlap:#ff6a3d; --amber:#ffb21e; --guide:#d7e4d2;
+  --display:"Barlow Condensed","Roboto Condensed","Arial Narrow",sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);overflow:hidden;overscroll-behavior:none}
+[hidden]{display:none!important}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+#map{position:fixed;inset:0;width:100%;height:100%;touch-action:none;display:block}
+
+.top{position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 8px) max(10px,env(safe-area-inset-right,0px)) 8px max(10px,env(safe-area-inset-left,0px));
+  background:linear-gradient(var(--bg) 70%,transparent);display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.lightbar{display:flex;align-items:center;gap:8px}
+.leds{flex:1;display:grid;grid-template-columns:repeat(15,1fr);gap:3px;height:22px}
+.led{border-radius:3px;background:#222b23}
+.led.on.c{background:var(--spray);box-shadow:0 0 10px var(--spray)}
+.led.on.s{background:var(--amber);box-shadow:0 0 10px var(--amber)}
+.steer{font-family:var(--display);font-weight:700;font-size:20px;min-width:118px;text-align:center;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.steer small{display:block;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.12em;text-transform:uppercase}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.stat{background:rgba(22,29,23,.88);border:1px solid var(--line);border-radius:8px;padding:5px 8px;min-width:0}
+.stat b{display:block;font-family:var(--display);font-size:24px;font-weight:700;line-height:1.05;font-variant-numeric:tabular-nums;white-space:nowrap}
+.stat span{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.stat.warn b{color:var(--overlap)}
+.stat .ok{color:var(--spray)}
+
+.side{position:fixed;right:max(10px,env(safe-area-inset-right,0px));top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:8px}
+.icon{width:52px;height:52px;border-radius:12px;background:rgba(22,29,23,.92);border:1px solid var(--line);font-family:var(--display);font-size:24px;font-weight:700;display:grid;place-items:center}
+.icon.active{border-color:var(--amber);color:var(--amber)}
+
+.bottom{position:fixed;left:0;right:0;bottom:0;padding:10px max(10px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 10px) max(10px,env(safe-area-inset-left,0px));
+  display:grid;grid-template-columns:1fr 1.6fr 1fr;gap:8px;background:linear-gradient(transparent,var(--bg) 30%)}
+.btn{min-height:64px;border-radius:14px;border:1px solid var(--line);background:var(--panel);font-family:var(--display);font-weight:700;font-size:20px;letter-spacing:.04em;text-transform:uppercase;padding:6px}
+.btn small{display:block;font-family:var(--body);font-size:11px;font-weight:500;letter-spacing:.06em;color:var(--muted);text-transform:none}
+#spray{font-size:26px;background:#2b2216;border-color:#5a4520;color:var(--amber)}
+#spray.on{background:var(--spray);border-color:var(--spray);color:#0b1a0b}
+#spray.on small{color:#1d3a1d}
+#ab.set{border-color:var(--amber);color:var(--amber)}
+
+.sheet{position:fixed;inset:0;background:rgba(5,8,5,.6);display:flex;align-items:flex-end;justify-content:center}
+.sheet-in{width:100%;max-width:520px;background:var(--panel);border-top:1px solid var(--line);border-radius:18px 18px 0 0;
+  padding:18px max(18px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 18px) max(18px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:14px;max-height:92%;overflow:auto}
+.sheet h2{font-family:var(--display);font-size:28px;margin:0;letter-spacing:.02em;text-wrap:balance}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.row label{font-weight:500}
+.width{display:flex;align-items:center;gap:6px}
+.width input{width:90px;height:52px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font-family:var(--display);font-size:28px;font-weight:700;text-align:center}
+.width button{width:52px;height:52px;border-radius:10px;border:1px solid var(--line);background:var(--bg);font-size:26px;font-weight:700}
+.seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{border:0;background:var(--bg);padding:12px 8px;font-weight:600;font-size:14px}
+.seg button.sel{background:var(--amber);color:#1b1404}
+.wide{width:100%}
+.danger{border-color:#6b2c1c;color:var(--overlap)}
+.note{font-size:13px;color:var(--muted);line-height:1.5;margin:0}
+.start .btn{width:100%}
+.start .primary{background:var(--amber);border-color:var(--amber);color:#1b1404}
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 96px);transform:translateX(-50%);background:#000c;border:1px solid var(--line);padding:10px 16px;border-radius:999px;font-size:14px;max-width:90%;text-align:center}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<canvas id="map"></canvas>
+
+<div class="top">
+  <div class="lightbar" id="lightbar">
+    <div class="leds" id="ledsL"></div>
+    <div class="steer" id="steer">— <small>brak linii AB</small></div>
+  </div>
+  <div class="stats">
+    <div class="stat"><b id="sSpeed">0,0</b><span>km/h</span></div>
+    <div class="stat"><b id="sArea">0,00</b><span>ha opryskane</span></div>
+    <div class="stat" id="sOverBox"><b id="sOver">0,00</b><span>ha nakładki</span></div>
+    <div class="stat" id="sAccBox"><b id="sAcc">—</b><span>GPS ± m</span></div>
+  </div>
+</div>
+
+<div class="side">
+  <button class="icon" id="zin" aria-label="Przybliż">+</button>
+  <button class="icon" id="zout" aria-label="Oddal">−</button>
+  <button class="icon active" id="center" aria-label="Wyśrodkuj na ciągniku">◎</button>
+  <button class="icon" id="menu" aria-label="Ustawienia">☰</button>
+</div>
+
+<div class="bottom">
+  <button class="btn" id="ab">Ustaw A<small>linia prowadząca</small></button>
+  <button class="btn" id="spray">Belka OFF<small>dotknij, aby włączyć</small></button>
+  <button class="btn" id="widthBtn"><span id="wLbl">10 m</span><small>szerokość belki</small></button>
+</div>
+
+<!-- Start -->
+<div class="sheet" id="start">
+  <div class="sheet-in start">
+    <h2>Prowadzenie GPS</h2>
+    <p class="note">Strzałka to Twój telefon. Gdy belka jest włączona, za strzałką maluje się pas o szerokości belki. Zielone to opryskane, pomarańczowe to nakładki.</p>
+    <div class="row"><label for="w0">Szerokość belki (m)</label>
+      <div class="width"><button data-d="-0.5" data-t="w0">−</button><input id="w0" type="number" inputmode="decimal" step="0.5" min="1" max="60" value="10"><button data-d="0.5" data-t="w0">+</button></div></div>
+    <button class="btn primary" id="goGps">Start z GPS<small>telefon zapyta o lokalizację</small></button>
+    <button class="btn" id="goDemo">Tryb demo<small>symulowany przejazd, do testu w domu</small></button>
+    <p class="note" id="resumeNote" hidden>Zapisane pole zostanie wczytane. „Nowe pole” znajdziesz w ustawieniach (☰).</p>
+  </div>
+</div>
+
+<!-- Settings -->
+<div class="sheet" id="settings" hidden>
+  <div class="sheet-in">
+    <div class="row"><h2>Ustawienia</h2><button class="icon" id="closeSet" aria-label="Zamknij">✕</button></div>
+    <div class="row"><label for="w1">Szerokość belki (m)</label>
+      <div class="width"><button data-d="-0.5" data-t="w1">−</button><input id="w1" type="number" inputmode="decimal" step="0.5" min="1" max="60" value="10"><button data-d="0.5" data-t="w1">+</button></div></div>
+    <div><div class="note" style="margin-bottom:6px">Obrót mapy</div>
+      <div class="seg"><button id="oHead" class="sel">Kierunek jazdy w górę</button><button id="oNorth">Północ w górę</button></div></div>
+    <button class="btn wide" id="clearAB">Usuń linię AB</button>
+    <button class="btn wide danger" id="newField">Nowe pole<small>kasuje opryskany obszar</small></button>
+    <p class="note">GPS w telefonie ma dokładność ok. 2–5 m, więc pasy mogą się lekko rozjeżdżać. Telefon trzymaj w stałym miejscu w kabinie. Ekran nie wygasa, dopóki strona jest otwarta.</p>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const fmt=(n,d)=>n.toLocaleString('pl-PL',{minimumFractionDigits:d,maximumFractionDigits:d});
+const canvas=$('map'),ctx=canvas.getContext('2d');
+
+const S={W:10,origin:null,pts:[],spraying:false,A:null,B:null,follow:true,headUp:true,zoom:4,
+  cam:{x:0,y:0},cur:null,heading:Math.PI/2,speed:0,acc:null,demo:false,started:false};
+let cells=new Map(),over=new Set(),overList=[];
+const KEY='gpsPole.v1';
+
+/* ---------- storage ---------- */
+function save(){ if(S.demo) return; try{localStorage.setItem(KEY,JSON.stringify({W:S.W,origin:S.origin,pts:S.pts,A:S.A,B:S.B,headUp:S.headUp}))}catch(e){} }
+function load(){ try{const d=JSON.parse(localStorage.getItem(KEY)||'null'); return d&&d.origin?d:null}catch(e){return null} }
+let saveT=0; function saveSoon(){clearTimeout(saveT);saveT=setTimeout(save,1500)}
+
+/* ---------- geometry ---------- */
+function toLocal(lat,lon){const o=S.origin;return{x:(lon-o.lon)*Math.cos(o.lat*Math.PI/180)*111320,y:(lat-o.lat)*110574}}
+function edges(p){const nx=-Math.sin(p.h),ny=Math.cos(p.h),hw=p.w/2;return[{x:p.x+nx*hw,y:p.y+ny*hw},{x:p.x-nx*hw,y:p.y-ny*hw}]}
+function inTri(px,py,a,b,c){const d1=(px-b.x)*(a.y-b.y)-(a.x-b.x)*(py-b.y),d2=(px-c.x)*(b.y-c.y)-(b.x-c.x)*(py-c.y),d3=(px-a.x)*(c.y-a.y)-(c.x-a.x)*(py-a.y);
+  return !(((d1<0)||(d2<0)||(d3<0))&&((d1>0)||(d2>0)||(d3>0)))}
+function rasterize(p1,p2){
+  const [L1,R1]=edges(p1),[L2,R2]=edges(p2),q=[L1,L2,R2,R1];
+  const minx=Math.floor(Math.min(...q.map(v=>v.x))),maxx=Math.floor(Math.max(...q.map(v=>v.x)));
+  const miny=Math.floor(Math.min(...q.map(v=>v.y))),maxy=Math.floor(Math.max(...q.map(v=>v.y)));
+  const t=p2.t;
+  for(let ix=minx;ix<=maxx;ix++)for(let iy=miny;iy<=maxy;iy++){
+    const cx=ix+.5,cy=iy+.5;
+    if(!(inTri(cx,cy,L1,L2,R2)||inTri(cx,cy,L1,R2,R1)))continue;
+    const k=(ix+50000)*100000+(iy+50000),old=cells.get(k);
+    if(old===undefined)cells.set(k,t);
+    else if(t-old>20&&!over.has(k)){over.add(k);overList.push(ix,iy)}
+  }
+}
+function rebuild(){cells=new Map();over=new Set();overList=[];for(let i=1;i<S.pts.length;i++)if(S.pts[i].on)rasterize(S.pts[i-1],S.pts[i])}
+
+/* ---------- position input ---------- */
+function onLocal(p,acc,spd,t){
+  S.acc=acc;
+  if(acc!=null&&acc>25){S.cur=S.cur||p;ui();dirty();return}
+  if(S.cur&&!S.demo){p={x:S.cur.x*0.35+p.x*0.65,y:S.cur.y*0.35+p.y*0.65}}
+  const last=S.pts[S.pts.length-1];
+  S.cur=p;
+  if(!last){S.pts.push({x:p.x,y:p.y,h:S.heading,w:S.W,on:false,t});ui();dirty();return}
+  const dx=p.x-last.x,dy=p.y-last.y,d=Math.hypot(dx,dy);
+  if(d<0.6){if(spd!=null)S.speed=spd;ui();dirty();return}
+  const h=Math.atan2(dy,dx);S.heading=h;
+  if(S.pts.length===1)last.h=h;
+  S.speed=(spd!=null&&spd>=0)?spd:d/Math.max(.2,t-last.t);
+  const np={x:p.x,y:p.y,h,w:S.W,on:S.spraying,t};
+  S.pts.push(np);
+  if(np.on)rasterize(last,np);
+  saveSoon();ui();dirty();
+}
+let watchId=null;
+let gpsMsg='Czekam na sygnał GPS…',gotFix=false;
+function startGps(){
+  if(!window.isSecureContext){gpsMsg='GPS zablokowany: otwórz aplikację z adresu https, nie z pliku.';toast(gpsMsg);dirty();return}
+  if(!('geolocation' in navigator)){gpsMsg='Ten telefon nie udostępnia GPS w przeglądarce.';toast(gpsMsg);dirty();return}
+  if(watchId!==null)navigator.geolocation.clearWatch(watchId);
+  gpsMsg='Szukam satelitów… (włącz lokalizację w telefonie)';dirty();
+  watchId=navigator.geolocation.watchPosition(pos=>{
+    const c=pos.coords;gotFix=true;
+    if(!S.origin)S.origin={lat:c.latitude,lon:c.longitude};
+    onLocal(toLocal(c.latitude,c.longitude),c.accuracy,c.speed,pos.timestamp/1000);
+  },err=>{
+    if(err.code===1){gpsMsg='Brak zgody na lokalizację. Ustawienia telefonu → Aplikacje → Chrome → Uprawnienia → Lokalizacja → Zezwalaj.';toast(gpsMsg);dirty();return}
+    gpsMsg='Brak sygnału GPS. Sprawdź, czy lokalizacja w telefonie jest włączona. Ponawiam…';dirty();
+    setTimeout(startGps,3000);
+  },{enableHighAccuracy:true,maximumAge:0,timeout:30000});
+}
+
+/* ---------- demo ---------- */
+let demoT=null,demoS=0;
+function startDemo(){
+  S.demo=true;S.pts=[];S.cur=null;rebuild();
+  const L=160;S.A={x:0,y:0};S.B={x:0,y:L};
+  let t0=performance.now()/1000;
+  demoT=setInterval(()=>{
+    const W=S.W,r=W/2,seg=L+Math.PI*r,v=3.0;demoS+=v*0.2;
+    const i=Math.floor(demoS/seg),u=demoS-i*seg,even=i%2===0;let x,y,straight=u<L;
+    if(straight){x=i*W+0.9*Math.sin(u/22+i);y=even?u:L-u}
+    else{const a=(u-L)/r,cx=i*W+r;x=cx-r*Math.cos(a);y=even?L+r*Math.sin(a):-r*Math.sin(a)}
+    if(S.spraying!==straight){S.spraying=straight;sprayUi()}
+    onLocal({x,y},1.2,v,t0+demoS/v);
+  },200);
+}
+
+/* ---------- AB guidance ---------- */
+function guidance(){
+  if(!S.A||!S.B||!S.cur)return null;
+  const dx=S.B.x-S.A.x,dy=S.B.y-S.A.y,len=Math.hypot(dx,dy);if(len<1)return null;
+  const ux=dx/len,uy=dy/len,nx=-uy,ny=ux;
+  const dist=(S.cur.x-S.A.x)*nx+(S.cur.y-S.A.y)*ny,k=Math.round(dist/S.W),e=dist-k*S.W;
+  const same=Math.cos(S.heading)*ux+Math.sin(S.heading)*uy>=0;
+  const rightOff=same?-e:e; // + = vehicle sits right of line → steer left
+  return{ux,uy,nx,ny,k,e,rightOff};
+}
+
+/* ---------- render ---------- */
+let need=true;function dirty(){need=true}
+let dpr=1,Wpx=0,Hpx=0;
+function resize(){dpr=Math.min(window.devicePixelRatio||1,2.5);Wpx=innerWidth;Hpx=innerHeight;canvas.width=Wpx*dpr;canvas.height=Hpx*dpr;dirty()}
+function rot(){return S.headUp?S.heading-Math.PI/2:0}
+function anchor(){return{x:Wpx/2,y:S.follow&&S.headUp?Hpx*0.64:Hpx*0.52}}
+function frame(){
+  requestAnimationFrame(frame);if(!need)return;need=false;
+  if(S.follow&&S.cur){S.cam.x=S.cur.x;S.cam.y=S.cur.y}
+  const s=S.zoom,a=anchor(),r=rot();
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#0e130f';ctx.fillRect(0,0,Wpx,Hpx);
+  ctx.translate(a.x,a.y);ctx.rotate(r);ctx.scale(s,-s);ctx.translate(-S.cam.x,-S.cam.y);
+  const R=Math.hypot(Wpx,Hpx)/s,cx=S.cam.x,cy=S.cam.y;
+
+  // grid
+  const step=s>3?10:s>0.8?50:200;ctx.lineWidth=1/s;ctx.strokeStyle='rgba(147,160,144,.10)';ctx.beginPath();
+  for(let gx=Math.floor((cx-R)/step)*step;gx<=cx+R;gx+=step){ctx.moveTo(gx,cy-R);ctx.lineTo(gx,cy+R)}
+  for(let gy=Math.floor((cy-R)/step)*step;gy<=cy+R;gy+=step){ctx.moveTo(cx-R,gy);ctx.lineTo(cx+R,gy)}
+  ctx.stroke();
+
+  // coverage (single path = no seams)
+  ctx.beginPath();
+  for(let i=1;i<S.pts.length;i++){const p=S.pts[i];if(!p.on)continue;const q=S.pts[i-1];
+    const [L1,R1]=edges(q),[L2,R2]=edges(p);ctx.moveTo(L1.x,L1.y);ctx.lineTo(L2.x,L2.y);ctx.lineTo(R2.x,R2.y);ctx.lineTo(R1.x,R1.y);ctx.closePath()}
+  ctx.fillStyle='rgba(111,214,111,.48)';ctx.fill('nonzero');
+  // overlaps
+  if(overList.length){ctx.beginPath();for(let i=0;i<overList.length;i+=2)ctx.rect(overList[i],overList[i+1],1,1);ctx.fillStyle='rgba(255,106,61,.7)';ctx.fill()}
+
+  // AB lines
+  const g=guidance();
+  if(S.A&&S.B){const dx=S.B.x-S.A.x,dy=S.B.y-S.A.y,len=Math.hypot(dx,dy);
+    if(len>=1){const ux=dx/len,uy=dy/len,nx=-uy,ny=ux,base=(cx-S.A.x)*nx+(cy-S.A.y)*ny,k0=Math.round(base/S.W),n=Math.ceil(R/S.W)+1,along=(cx-S.A.x)*ux+(cy-S.A.y)*uy;
+      for(let k=k0-n;k<=k0+n;k++){const ox=S.A.x+nx*k*S.W,oy=S.A.y+ny*k*S.W;const cur=g&&k===g.k;
+        ctx.beginPath();ctx.moveTo(ox+ux*(along-R),oy+uy*(along-R));ctx.lineTo(ox+ux*(along+R),oy+uy*(along+R));
+        ctx.lineWidth=(cur?3:1.2)/s;ctx.strokeStyle=cur?'rgba(255,178,30,.95)':'rgba(215,228,210,.28)';ctx.stroke()}}}
+  // A/B markers
+  [['A',S.A],['B',S.B]].forEach(([t,p])=>{if(!p)return;ctx.save();ctx.translate(p.x,p.y);ctx.scale(1/s,-1/s);ctx.rotate(-r);
+    ctx.fillStyle='#ffb21e';ctx.beginPath();ctx.arc(0,0,11,0,7);ctx.fill();ctx.fillStyle='#1b1404';ctx.font='700 14px Barlow Condensed,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,0,1);ctx.restore()});
+
+  // tractor + boom
+  if(S.cur){const p=S.cur,h=S.heading,nx=-Math.sin(h),ny=Math.cos(h),hw=S.W/2,bx=p.x-Math.cos(h)*0.4,by=p.y-Math.sin(h)*0.4;
+    ctx.beginPath();ctx.moveTo(bx+nx*hw,by+ny*hw);ctx.lineTo(bx-nx*hw,by-ny*hw);ctx.lineCap='round';
+    ctx.lineWidth=Math.max(5/s,0.5);ctx.strokeStyle=S.spraying?'#6fd66f':'#5d6a5b';ctx.stroke();
+    if(S.acc){ctx.beginPath();ctx.arc(p.x,p.y,S.acc,0,7);ctx.fillStyle='rgba(255,178,30,.08)';ctx.fill()}
+    ctx.save();ctx.translate(p.x,p.y);ctx.rotate(h);ctx.scale(1/s,1/s);
+    ctx.beginPath();ctx.moveTo(22,0);ctx.lineTo(-14,-14);ctx.lineTo(-7,0);ctx.lineTo(-14,14);ctx.closePath();
+    ctx.fillStyle='#ffb21e';ctx.strokeStyle='#1b1404';ctx.lineWidth=2.5;ctx.lineJoin='round';ctx.fill();ctx.stroke();ctx.restore()}
+  if(S.started&&!S.demo&&!gotFix){ctx.setTransform(dpr,0,0,dpr,0,0);ctx.font='600 16px Barlow,sans-serif';ctx.textAlign='center';
+    const words=gpsMsg.split(' '),lines=[];let ln='';const maxW=Math.min(Wpx-48,420);
+    words.forEach(w=>{const t=ln?ln+' '+w:w;if(ctx.measureText(t).width>maxW&&ln){lines.push(ln);ln=w}else ln=t});if(ln)lines.push(ln);
+    const bh=lines.length*22+20,by=Hpx*0.42-bh/2;ctx.fillStyle='rgba(22,29,23,.94)';ctx.fillRect((Wpx-maxW)/2-12,by,maxW+24,bh);
+    ctx.fillStyle='#ffb21e';lines.forEach((l,i)=>ctx.fillText(l,Wpx/2,by+26+i*22))}
+}
+
+/* ---------- UI ---------- */
+const leds=[];for(let i=0;i<15;i++){const d=document.createElement('div');d.className='led';$('ledsL').appendChild(d);leds.push(d)}
+function ui(){
+  $('sSpeed').textContent=fmt(S.speed*3.6,1);
+  $('sArea').textContent=fmt(cells.size/10000,2);
+  $('sOver').textContent=fmt(over.size/10000,2);$('sOverBox').classList.toggle('warn',over.size>0);
+  const ab=$('sAccBox');if(S.acc==null){$('sAcc').textContent='—'}else{$('sAcc').innerHTML=S.acc<=3?'<span class="ok">'+fmt(S.acc,1)+'</span>':fmt(S.acc,1)}
+  ab.classList.toggle('warn',S.acc!=null&&S.acc>8);
+  const g=guidance();leds.forEach(l=>l.className='led');
+  if(!g){$('steer').innerHTML=S.A&&!S.B?'— <small>jedź i ustaw B</small>':'— <small>brak linii AB</small>';return}
+  const off=g.rightOff,m=Math.abs(off),n=Math.min(7,Math.round(m/0.15));
+  leds[7].classList.add('on','c');
+  for(let i=1;i<=n;i++){const idx=off>0?7-i:7+i;leds[idx].classList.add('on','s')}
+  if(m<0.15)$('steer').innerHTML='NA LINII <small>pas '+(g.k>=0?'+':'')+g.k+'</small>';
+  else $('steer').innerHTML=(off>0?'◀ ':'')+fmt(m,2)+' m'+(off<0?' ▶':'')+'<small>'+(off>0?'skręć w lewo':'skręć w prawo')+'</small>';
+}
+function sprayUi(){const b=$('spray');b.classList.toggle('on',S.spraying);b.innerHTML=S.spraying?'Belka ON<small>maluje pas za Tobą</small>':'Belka OFF<small>dotknij, aby włączyć</small>'}
+function abUi(){const b=$('ab');b.classList.toggle('set',!!(S.A&&S.B));b.innerHTML=!S.A?'Ustaw A<small>linia prowadząca</small>':!S.B?'Ustaw B<small>koniec przejazdu</small>':'Linia AB<small>aktywna</small>'}
+function widthUi(){$('wLbl').textContent=fmt(S.W,S.W%1?1:0)+' m';$('w0').value=S.W;$('w1').value=S.W}
+function orientUi(){$('oHead').classList.toggle('sel',S.headUp);$('oNorth').classList.toggle('sel',!S.headUp)}
+let toastT;function toast(m){const t=$('toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,3500)}
+function setW(v){v=Math.max(1,Math.min(60,Math.round((+v||10)*2)/2));S.W=v;widthUi();ui();dirty();saveSoon()}
+
+document.querySelectorAll('[data-d]').forEach(b=>b.addEventListener('click',()=>setW((+$(b.dataset.t).value||S.W)+(+b.dataset.d))));
+['w0','w1'].forEach(id=>$(id).addEventListener('change',e=>setW(e.target.value)));
+$('spray').addEventListener('click',()=>{if(S.demo){toast('W demo belka włącza się sama na prostych.');return}S.spraying=!S.spraying;if(S.pts.length)S.pts[S.pts.length-1].on=S.pts[S.pts.length-1].on;sprayUi()});
+$('ab').addEventListener('click',()=>{if(!S.cur){toast('Najpierw poczekaj na sygnał GPS.');return}
+  if(!S.A){S.A={x:S.cur.x,y:S.cur.y};toast('Punkt A ustawiony. Przejedź pas i ustaw B.')}
+  else if(!S.B){if(Math.hypot(S.cur.x-S.A.x,S.cur.y-S.A.y)<20){toast('Odjedź co najmniej 20 m od punktu A.');return}S.B={x:S.cur.x,y:S.cur.y};toast('Linia AB gotowa. Kolejne pasy co '+fmt(S.W,1)+' m.')}
+  else{toast('Linię AB usuniesz w ustawieniach (☰).')}
+  abUi();ui();dirty();saveSoon()});
+$('widthBtn').addEventListener('click',()=>{$('settings').hidden=false});
+$('menu').addEventListener('click',()=>{$('settings').hidden=false});
+$('closeSet').addEventListener('click',()=>{$('settings').hidden=true});
+$('settings').addEventListener('click',e=>{if(e.target.id==='settings')$('settings').hidden=true});
+$('oHead').addEventListener('click',()=>{S.headUp=true;orientUi();dirty();saveSoon()});
+$('oNorth').addEventListener('click',()=>{S.headUp=false;orientUi();dirty();saveSoon()});
+$('clearAB').addEventListener('click',()=>{S.A=S.B=null;abUi();ui();dirty();saveSoon();toast('Linia AB usunięta.')});
+let armT=0;$('newField').addEventListener('click',e=>{const b=e.currentTarget;
+  if(!b.dataset.arm){b.dataset.arm='1';b.innerHTML='Dotknij ponownie<small>aby skasować pole</small>';clearTimeout(armT);armT=setTimeout(()=>{delete b.dataset.arm;b.innerHTML='Nowe pole<small>kasuje opryskany obszar</small>'},3000);return}
+  delete b.dataset.arm;b.innerHTML='Nowe pole<small>kasuje opryskany obszar</small>';
+  const last=S.cur;S.pts=last?[{x:last.x,y:last.y,h:S.heading,w:S.W,on:false,t:Date.now()/1000}]:[];S.A=S.B=null;rebuild();abUi();ui();dirty();save();$('settings').hidden=true;toast('Nowe pole rozpoczęte.')});
+$('zin').addEventListener('click',()=>{S.zoom=Math.min(40,S.zoom*1.4);dirty()});
+$('zout').addEventListener('click',()=>{S.zoom=Math.max(0.15,S.zoom/1.4);dirty()});
+$('center').addEventListener('click',()=>{S.follow=true;$('center').classList.add('active');dirty()});
+
+/* pan & pinch */
+const ptr=new Map();let pinch0=0,zoom0=0;
+canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);ptr.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(ptr.size===2){const [a,b]=[...ptr.values()];pinch0=Math.hypot(a.x-b.x,a.y-b.y);zoom0=S.zoom}});
+canvas.addEventListener('pointermove',e=>{const p=ptr.get(e.pointerId);if(!p)return;
+  if(ptr.size===2){p.x=e.clientX;p.y=e.clientY;const [a,b]=[...ptr.values()];S.zoom=Math.max(.15,Math.min(40,zoom0*Math.hypot(a.x-b.x,a.y-b.y)/pinch0));dirty();return}
+  const dx=e.clientX-p.x,dy=e.clientY-p.y;p.x=e.clientX;p.y=e.clientY;if(Math.abs(dx)+Math.abs(dy)<1)return;
+  if(S.follow){S.follow=false;$('center').classList.remove('active')}
+  const r=rot(),c=Math.cos(r),s=Math.sin(r),wx=(dx*c+dy*s)/S.zoom,wy=-(-dx*s+dy*c)/S.zoom;S.cam.x-=wx;S.cam.y-=wy;dirty()});
+['pointerup','pointercancel'].forEach(ev=>canvas.addEventListener(ev,e=>ptr.delete(e.pointerId)));
+canvas.addEventListener('wheel',e=>{e.preventDefault();S.zoom=Math.max(.15,Math.min(40,S.zoom*(e.deltaY<0?1.15:1/1.15)));dirty()},{passive:false});
+
+/* wake lock */
+let wl=null;async function wake(){try{if('wakeLock' in navigator&&document.visibilityState==='visible')wl=await navigator.wakeLock.request('screen')}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')wake();else save()});
+
+/* start */
+const saved=load();
+if(saved){S.W=saved.W||10;S.origin=saved.origin;S.pts=saved.pts||[];S.A=saved.A;S.B=saved.B;S.headUp=saved.headUp!==false;rebuild();$('resumeNote').hidden=false;
+  const l=S.pts[S.pts.length-1];if(l){S.cur={x:l.x,y:l.y};S.heading=l.h}}
+widthUi();orientUi();abUi();sprayUi();ui();
+function begin(){S.W=Math.max(1,+$('w0').value||10);widthUi();$('start').hidden=true;S.started=true;wake();dirty()}
+$('goGps').addEventListener('click',()=>{begin();startGps()});
+$('goDemo').addEventListener('click',()=>{begin();S.zoom=3;startDemo();toast('Demo: belka włącza się sama na prostych, nawroty bez oprysku.')});
+addEventListener('resize',resize);resize();requestAnimationFrame(frame);
+if('serviceWorker' in navigator&&window.isSecureContext){navigator.serviceWorker.register('sw.js').catch(()=>{})}
+})();
+</script>
+</body>
+</html>

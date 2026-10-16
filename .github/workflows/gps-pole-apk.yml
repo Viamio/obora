@@ -1,0 +1,31 @@
+name: GPS Pole APK
+on:
+  push:
+    branches: [gps-pole-app]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Build APK
+        working-directory: android
+        run: gradle assembleDebug --no-daemon --stacktrace
+      - run: cp android/app/build/outputs/apk/debug/app-debug.apk GPS-Pole.apk
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: gps-pole-${{ github.run_number }}
+          name: GPS Pole ${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          make_latest: false
+          body: Aplikacja GPS Pole na Androida. Pobierz plik GPS-Pole.apk na telefonie i zainstaluj.
+          files: GPS-Pole.apk
