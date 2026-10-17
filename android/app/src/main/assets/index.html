@@ -200,6 +200,8 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
       <div class="row"><div><b>Aktualizacja</b><div class="note" id="updText">—</div></div><button class="btn" id="updBtn">Sprawdź</button></div>
       <div class="bar" id="updBar" hidden><i id="updFill"></i></div>
     </div>
+    <div class="row"><div><label for="minSpd">Ślad od prędkości (km/h)</label><div class="note">Poniżej tej prędkości ślad się nie rysuje.</div></div>
+      <div class="num"><button id="minSpdDn" aria-label="Mniej">−</button><input id="minSpd" type="number" inputmode="decimal" step="0.5" min="0.5" max="15" value="1.5"><button id="minSpdUp" aria-label="Więcej">+</button></div></div>
     <button class="btn wide" id="clearAB">Usuń linię AB</button>
     <button class="btn wide danger" id="newField">Nowe pole<small>kasuje zrobiony obszar</small></button>
     <p class="note" id="perf" style="color:var(--fg)">Ekran: — kl./s</p>
@@ -361,7 +363,11 @@ function kfVel(zvx,zvy,R){const Sv=KF.P11+R,K0=KF.P01/Sv,K1=KF.P11/Sv,ix=zvx-KF.
   KF.px+=K0*ix;KF.py+=K0*iy;KF.vx+=K1*ix;KF.vy+=K1*iy;
   const P00=KF.P00-K0*KF.P01,P01=(1-K1)*KF.P01,P11=(1-K1)*KF.P11;KF.P00=P00;KF.P01=P01;KF.P11=P11}
 let rawHist=[],lastFixAt=0;
-const MOVE=0.45,ARM_DIST=0.5,STEADY=1.0;   // m/s, m of travel before marking starts, s of steady motion before heading follows
+let minSpdKmh=+(lsGet('gpsPole.minSpd')||1.5);if(!(minSpdKmh>=0.3&&minSpdKmh<=15))minSpdKmh=1.5;
+let MOVE=0.45,HDG=0.8;               // m/s: start of marking, start of heading-from-velocity
+function applyMinSpd(){const v=minSpdKmh/3.6;MOVE=v;HDG=Math.max(0.2,Math.min(0.8,v));STILL=Math.min(0.45,v*0.8)}
+let STILL=0.45;applyMinSpd();
+const ARM_DIST=0.5,STEADY=1.0;   // m/s, m of travel before marking starts, s of steady motion before heading follows
 let movingSince=0,armAt=null,armDist=0;                     // m/s; below this the tractor counts as standing still
 function onLocal(p,acc,spd,t,brg){
   S.acc=acc;const now=performance.now();fixTimes.push(now);while(fixTimes.length&&now-fixTimes[0]>2000)fixTimes.shift();
@@ -371,15 +377,15 @@ function onLocal(p,acc,spd,t,brg){
   rawHist.push({x:p.x,y:p.y,t});while(rawHist.length>2&&t-rawHist[0].t>6)rawHist.shift();
   let posMoving=false,posSpd=0;
   if(rawHist.length>=3){const a=rawHist[0],z=rawHist[rawHist.length-1],dd=Math.hypot(z.x-a.x,z.y-a.y),tt=z.t-a.t;
-    posSpd=tt>0?dd/tt:0;posMoving=tt>=2&&dd>Math.max(3,1.6*(acc||3))&&posSpd>MOVE}
+    posSpd=tt>0?dd/tt:0;posMoving=tt>=2&&dd>Math.max(3,1.6*(acc||3))&&posSpd>Math.max(STILL,0.3)}
   let hasDop=spd!=null&&spd>=0;
-  if(hasDop&&spd<MOVE&&posMoving){hasDop=false;spd=null}   // chip says 0 but we are driving: ignore its speed
-  const still=hasDop&&spd<MOVE;
+  if(hasDop&&spd<STILL&&posMoving){hasDop=false;spd=null}   // chip says 0 but we are driving: ignore its speed
+  const still=hasDop&&spd<STILL;
   const dt=KF.ok?Math.max(0.01,t-KF.t):0;
   if(!KF.ok||dt>6)kfInit(p,R);
   else{kfPredict(dt);
     if(still)kfVel(0,0,0.01);
-    else if(hasDop&&brg!=null&&brg>=0&&spd>=0.8){const b=brg*Math.PI/180;kfVel(spd*Math.sin(b),spd*Math.cos(b),0.09)}
+    else if(hasDop&&brg!=null&&brg>=0&&spd>=HDG){const b=brg*Math.PI/180;kfVel(spd*Math.sin(b),spd*Math.cos(b),0.09)}
     kfPos(p.x,p.y,still?R*4:R)}
   KF.t=t;
   const fp={x:KF.px,y:KF.py},fv=Math.hypot(KF.vx,KF.vy);
@@ -404,8 +410,8 @@ function onLocal(p,acc,spd,t,brg){
         if(!movingSince)movingSince=t-STEADY;
         toast('Kierunek jazdy ustalony. Maszyna na wprost.')}}}
   let hm=null;
-  if(hasDop&&brg!=null&&brg>=0&&spd>=0.8)hm=(90-brg)*Math.PI/180;
-  else if(fv>=0.8&&!still)hm=Math.atan2(KF.vy,KF.vx);
+  if(hasDop&&brg!=null&&brg>=0&&spd>=HDG)hm=(90-brg)*Math.PI/180;
+  else if(fv>=HDG&&!still)hm=Math.atan2(KF.vy,KF.vx);
   if(hm!=null)S.lastHm=hm;
   if(hm!=null&&steady){if(!S.hdgOk){S.heading=hm;S.hdgOk=true;D.h=hm}else S.heading+=angDiff(S.heading,hm)*(1-Math.exp(-Math.max(dt,0.03)/0.5))}
   if(!S.hdgOk||!steady){ui();return}
@@ -717,6 +723,11 @@ $('menu').addEventListener('click',()=>{$('settings').hidden=false});
 $('closeSet').addEventListener('click',()=>{$('settings').hidden=true});
 $('oHead').addEventListener('click',()=>{S.headUp=true;orientUi();saveSoon()});
 $('oNorth').addEventListener('click',()=>{S.headUp=false;orientUi();saveSoon()});
+function setMinSpd(v){v=Math.round(Math.max(0.5,Math.min(15,parseFloat(String(v).replace(',','.'))||1.5))*2)/2;minSpdKmh=v;lsSet('gpsPole.minSpd',v);applyMinSpd();$('minSpd').value=v}
+$('minSpdDn').addEventListener('click',()=>setMinSpd(minSpdKmh-0.5));
+$('minSpdUp').addEventListener('click',()=>setMinSpd(minSpdKmh+0.5));
+$('minSpd').addEventListener('change',e=>setMinSpd(e.target.value));
+setMinSpd(minSpdKmh);
 $('clearAB').addEventListener('click',()=>{S.A=S.B=null;abUi();saveSoon();toast('Linia AB usunięta.')});
 function openClear(){$('clrArea').textContent=fmt(cells.size/10000,2)+' ha';const b=$('clearAll');delete b.dataset.arm;
   b.innerHTML='Usuń cały zaznaczony obszar<small>linia AB i sprzęt zostają</small>';$('clearSheet').hidden=false}
