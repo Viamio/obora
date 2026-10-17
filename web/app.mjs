@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "3.9";
+export const APP_VERSION = "4.0";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -1449,7 +1449,7 @@ let insTarget = null;
 function openIns(a, calf) {
   closeDialogs();
   insTarget = { a, calf };
-  $("insWho").textContent = `${a.kolczyk}${a.nazwa ? " " + a.nazwa : ""} – ${animalDesc(a)}`;
+  $("insWho").textContent = `${a.kolczyk} – ${animalDesc(a)}`;
   $("insDate").value = L.todayISO(); $("insDate").max = L.todayISO();
   $("insByk").value = ""; $("insErr").hidden = true;
   insPreview();
@@ -1507,23 +1507,32 @@ function sellUi(pre, a, kol) {
 function openSell(a, kol) {
   closeDialogs();
   sellTarget = { a, kol };
-  $("sellWho").textContent = `${a.kolczyk}${a.nazwa ? " " + a.nazwa : ""} – ${animalDesc(a)}`;
-  $("sellPrice").value = a.sprzedana?.cena ?? ""; $("sellDate").value = a.sprzedana?.data || L.todayISO(); $("sellNote").value = a.sprzedana?.uwagi || "";
+  $("sellWho").textContent = `${a.kolczyk} – ${animalDesc(a)}`;
+  const pl = (n) => (n || n === 0 ? String(n).replace(".", ",") : "");
+  $("sellPrice").value = pl(a.sprzedana?.cena); $("sellWeight").value = pl(a.sprzedana?.waga); $("sellPerKg").value = pl(a.sprzedana?.zaKg); $("sellDate").value = a.sprzedana?.data || L.todayISO(); $("sellNote").value = a.sprzedana?.uwagi || "";
   $("sellErr").hidden = true;
   $("sellDlg").showModal();
   setTimeout(() => $("sellPrice").focus(), 50);
 }
 $("sellCancel").onclick = () => $("sellDlg").close();
+const num = (v) => { const r = String(v || "").replace(/\s|zł|kg|\//gi, "").replace(",", "."); return r === "" ? NaN : Number(r); };
+const plNum = (n) => String(Math.round(n * 100) / 100).replace(".", ",");
+// waga × cena za kg = razem; razem ÷ waga = cena za kg
+const sellCalc = () => { const w = num($("sellWeight").value), k = num($("sellPerKg").value); if (w > 0 && k >= 0) $("sellPrice").value = plNum(w * k); };
+$("sellWeight").addEventListener("input", () => { const w = num($("sellWeight").value), p = num($("sellPrice").value);
+  if (Number.isFinite(num($("sellPerKg").value))) sellCalc(); else if (w > 0 && p >= 0) $("sellPerKg").value = plNum(p / w); });
+$("sellPerKg").addEventListener("input", sellCalc);
+$("sellPrice").addEventListener("input", () => { const w = num($("sellWeight").value), p = num($("sellPrice").value); if (w > 0 && p >= 0) $("sellPerKg").value = plNum(p / w); });
 $("sellForm").addEventListener("submit", (e) => {
   e.preventDefault();
-  const raw = $("sellPrice").value.replace(/\s|zł/gi, "").replace(",", ".");
-  const cena = raw === "" ? NaN : Number(raw);
+  const cena = num($("sellPrice").value), waga = num($("sellWeight").value), zaKg = num($("sellPerKg").value);
   const err = (t) => { $("sellErr").textContent = t; $("sellErr").hidden = false; };
   if (!Number.isFinite(cena) || cena < 0) return err("Wpisz kwotę, np. 6500.");
   const data = $("sellDate").value || L.todayISO();
   if (data > L.todayISO()) return err("Data sprzedaży nie może być z przyszłości.");
   const { a, kol } = sellTarget;
-  writeAny(kol, a, { sprzedana: { cena, data, uwagi: $("sellNote").value.trim() }, doSprzedania: false });
+  if ($("sellWeight").value && !(waga > 0)) return err("Wpisz wagę w kg, np. 650.");
+  writeAny(kol, a, { sprzedana: { cena, data, uwagi: $("sellNote").value.trim(), waga: waga > 0 ? waga : 0, zaKg: zaKg >= 0 ? Math.round(zaKg * 100) / 100 : 0 }, doSprzedania: false });
   // sprzedana sztuka znika z listy „Do zacielenia”
   queue.filter((q) => sameTag(q.kolczyk, a.kolczyk)).forEach((q) => deleteDoc(doc(queueCol(farm), q.id)).catch(() => {}));
   $("sellDlg").close();
@@ -1558,12 +1567,21 @@ function viewSales(v) {
   const tot = el("div", "saletotal");
   const t1 = el("div"); t1.append(el("span", null, "Razem"), el("b", null, zl(sum)));
   const t2 = el("div"); t2.append(el("span", null, `W ${year} r.`), el("b", null, zl(sumY)));
-  tot.append(t1, t2); s2.append(tot);
+  tot.append(t1, t2);
+  const kg = sold.filter(([a]) => a.sprzedana.waga > 0);
+  if (kg.length) {
+    const w = kg.reduce((s, [a]) => s + a.sprzedana.waga, 0), p = kg.reduce((s, [a]) => s + (Number(a.sprzedana.cena) || 0), 0);
+    const t3 = el("div", "wide"); t3.append(el("span", null, `Waga razem · średnio za kg (${kg.length} szt.)`), el("b", null, `${plNum(w)} kg · ${zl(p / w)}/kg`));
+    tot.append(t3);
+  }
+  s2.append(tot);
   if (!sold.length) s2.append(el("div", "empty", "Jeszcze nic nie sprzedano. W Edytuj → na dole „Sprzedana…” wpiszesz kwotę."));
   for (const [a, kol] of sold) {
     const row = el("div", "salerow sold");
     const info = el("div", "sinfo");
-    info.append(tagEl(a), el("small", null, `${kindOfAny(a)} · ${L.fmt(a.sprzedana.data)}${a.sprzedana.uwagi ? " · " + a.sprzedana.uwagi : ""}`));
+    const sp = a.sprzedana;
+    info.append(tagEl(a), el("small", null, `${kindOfAny(a)} · ${L.fmt(sp.data)}${sp.uwagi ? " · " + sp.uwagi : ""}`));
+    if (sp.waga) info.append(el("span", "kgline", `${plNum(sp.waga)} kg${sp.zaKg ? ` × ${zl(sp.zaKg)}/kg` : ""}`));
     const right = el("div", "sright");
     right.append(el("b", "price", zl(a.sprzedana.cena)));
     const acts = el("div", "abtns");

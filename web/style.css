@@ -291,3 +291,6 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .saletotal span{font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
 .saletotal b{font-family:var(--display);font-size:1.4rem;white-space:nowrap;line-height:1.1;font-variant-numeric:tabular-nums}
 .abtns .sm{min-height:36px;padding:4px 10px;font-size:.85rem}
+.saletotal>div.wide{grid-column:1/-1}
+.saletotal .wide b{font-size:1.15rem;white-space:normal}
+.salerow .kgline{font-size:.85rem;font-weight:600;color:var(--fg);font-variant-numeric:tabular-nums}

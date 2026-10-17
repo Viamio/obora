@@ -191,14 +191,22 @@
   <form id="sellForm" novalidate>
     <div class="sheethead"><h2 id="sellTitle">Sprzedana</h2><button type="button" class="ghost x" id="sellCancel" aria-label="Zamknij">✕</button></div>
     <p class="hint" id="sellWho"></p>
-    <label for="sellPrice">Za ile poszła
+    <div class="row2">
+      <label for="sellWeight">Ile ważyła
+        <span class="numrow"><input id="sellWeight" inputmode="decimal" autocomplete="off" placeholder="np. 650"><span>kg</span></span>
+      </label>
+      <label for="sellPerKg">Cena za kg
+        <span class="numrow"><input id="sellPerKg" inputmode="decimal" autocomplete="off" placeholder="np. 10,50"><span>zł/kg</span></span>
+      </label>
+    </div>
+    <label for="sellPrice">Za ile poszła <small>(razem – policzy się z wagi i ceny za kg)</small>
       <span class="numrow"><input id="sellPrice" inputmode="decimal" autocomplete="off" placeholder="np. 6500"><span>zł</span></span>
     </label>
     <label for="sellDate">Data sprzedaży
       <input id="sellDate" type="date">
     </label>
     <label for="sellNote">Komu / uwagi <small>(opcjonalnie)</small>
-      <input id="sellNote" autocomplete="off" placeholder="np. handlarz, rzeźnia, waga 650 kg">
+      <input id="sellNote" autocomplete="off" placeholder="np. handlarz, rzeźnia">
     </label>
     <p class="err" id="sellErr" hidden></p>
     <div class="actions"><button type="submit" class="primary" id="sellSave">Zapisz sprzedaż</button></div>
