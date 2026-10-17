@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "3.8";
+export const APP_VERSION = "3.9";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -548,11 +548,12 @@ function alertsSection(v, cs, ks, title = "Do zrobienia") {
     if (a.kind === "check") ab.append(btn("Cielna", "okbtn", () => upd({ cielna: "tak" }, `${c.kolczyk}: cielna`)), btn("Niecielna", "nobtn", () => upd({ cielna: "nie" }, `${c.kolczyk}: niecielna`)));
     if (a.kind === "dry") ab.append(btn("Zasuszona", "okbtn", () => openDry(c)));
     if (a.kind === "move") ab.append(btn("Przegnana", "okbtn", () => upd({ przegnana: true }, `${c.kolczyk}: na porodówce`)));
-    if (a.kind === "ruja") ab.append(btn("Grzeje się dziś", "nobtn", () => upd({ ruja: today }, `${c.kolczyk}: ruja zapisana`)), btn("Zacielona dziś", "okbtn", a.calf ? () => heiferInsem(c, today) : zacielona));
-    if (a.kind === "insem") ab.append(btn("Zacielona dziś", "okbtn", zacielona));
+    const other = () => btn("Inna data…", "ghost", () => openIns(c, !!a.calf));
+    if (a.kind === "ruja") ab.append(btn("Grzeje się dziś", "nobtn", () => upd({ ruja: today }, `${c.kolczyk}: ruja zapisana`)), btn("Zacielona dziś", "okbtn", a.calf ? () => heiferInsem(c, today) : zacielona), other());
+    if (a.kind === "insem") ab.append(btn("Zacielona dziś", "okbtn", zacielona), other());
     if (a.kind === "due") ab.append(btn("Wycieliła się", "okbtn", () => a.calf ? toHerd(c, { wycielenie: today }) : calved(c, today)));
     if (a.kind === "karencjaOk") ab.append(btn("OK, doję", "okbtn", () => patch(c, { karencjaOk: true }, `${c.kolczyk}: karencja zakończona`)));
-    if (a.kind === "krycie") ab.append(btn("Zacielona dziś", "okbtn", () => heiferInsem(c, today)), btn("Do stada krów", "nobtn", () => toHerd(c, {})));
+    if (a.kind === "krycie") ab.append(btn("Zacielona dziś", "okbtn", () => heiferInsem(c, today)), other(), btn("Do stada krów", "nobtn", () => toHerd(c, {})));
     box.append(row);
   }
   sec.append(box);
@@ -962,7 +963,7 @@ function fillLists() {
 }
 
 // ---------------- formularz krowy ----------------
-function closeDialogs() { for (const id of ["cowDlg", "calfDlg", "pickDlg", "dryDlg", "sellDlg"]) { const d = $(id); if (d.open) d.close(); } }
+function closeDialogs() { for (const id of ["cowDlg", "calfDlg", "pickDlg", "dryDlg", "sellDlg", "insDlg"]) { const d = $(id); if (d.open) d.close(); } }
 function currentPlace() { return tab.startsWith("m:") && tab !== "m:" + NO_PLACE ? tab.slice(2) : ""; }
 function updatePreview() {
   const z = $("zacielenie").value, r = $("ruja").value;
@@ -1355,6 +1356,7 @@ function viewQueue(v) {
     const btns = el("div", "cowbtns");
     btns.append(
       btn("Zacielona", "okbtn", () => inseminate(q)),
+      ...(findAnimal(q.kolczyk) ? [btn("Inna data…", "ghost", () => { const a = findAnimal(q.kolczyk); openIns(a, !cows.includes(a)); })] : []),
       btn("Usuń z listy", "ghost", () => { deleteDoc(doc(queueCol(farm), q.id)); status(`${q.kolczyk} usunięta z listy.`); }),
     );
     foot.append(lw, btns);
@@ -1442,6 +1444,51 @@ function updateMotherInfo() {
   if (p?.skip) $("cMotherInfo").textContent += " " + p.skip;
   else if (p) $("cMotherChkT").textContent = p.heifer ? `Wpisz jej wycielenie ${L.fmt(date)} i przenieś do krów` : `Wpisz matce wycielenie ${L.fmt(date)}` + (p.onlyDate ? "" : " (terminy od nowa)");
 }
+// ---------------- zacielenie z wyborem daty ----------------
+let insTarget = null;
+function openIns(a, calf) {
+  closeDialogs();
+  insTarget = { a, calf };
+  $("insWho").textContent = `${a.kolczyk}${a.nazwa ? " " + a.nazwa : ""} – ${animalDesc(a)}`;
+  $("insDate").value = L.todayISO(); $("insDate").max = L.todayISO();
+  $("insByk").value = ""; $("insErr").hidden = true;
+  insPreview();
+  $("insDlg").showModal();
+}
+function insPreview() {
+  const d = $("insDate").value, t = insTarget;
+  $("insDue").textContent = d ? L.fmt(L.addDays(d, L.GESTATION)) : "—";
+  const re = t && !t.calf && d && isReInsem(t.a, d);
+  $("insNote").hidden = !re;
+  if (re) $("insNote").textContent = `To będzie drugie zacielenie – pierwsze (${L.fmt(t.a.zacielenie)}${t.a.byk ? ", " + t.a.byk : ""}) zostaje.`;
+}
+$("insDate").addEventListener("input", insPreview);
+$("insCancel").onclick = () => $("insDlg").close();
+$("insForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const err = (t) => { $("insErr").textContent = t; $("insErr").hidden = false; };
+  const d = $("insDate").value, byk = $("insByk").value.trim();
+  const { a, calf } = insTarget;
+  if (!d) return err("Wybierz datę zacielenia.");
+  if (d > L.todayISO()) return err("Data nie może być z przyszłości.");
+  if (a.wycielenie && d <= a.wycielenie) return err(`Data jest przed ostatnim wycieleniem (${L.fmt(a.wycielenie)}).`);
+  if (calf && a.urodzona && d <= a.urodzona) return err("Data jest przed urodzeniem.");
+  let msg;
+  if (calf) {
+    writeCalf(a.id, { ...rowData(a), zacielenie: d, byk, cielna: "", przegnana: false });
+    msg = `${a.kolczyk}: zacielona ${L.fmt(d)}`;
+  } else if (isReInsem(a, d)) {
+    patch(a, { zacielenie2: d, byk2: byk, ruja: d, cielna: "" });
+    msg = `${a.kolczyk}: drugie zacielenie ${L.fmt(d)}`;
+  } else {
+    patch(a, { zacielenie: d, byk, ruja: d, cielna: "", zacielenie2: "", byk2: "", przegnana: false, zasuszona: false, zasuszonaData: "" });
+    msg = `${a.kolczyk}: zacielona ${L.fmt(d)}`;
+  }
+  queue.filter((q) => sameTag(q.kolczyk, a.kolczyk)).forEach((q) => deleteDoc(doc(queueCol(farm), q.id)).catch(() => {}));
+  $("insDlg").close();
+  status(`${msg}${byk ? " bykiem " + byk : ""} – termin porodu ${L.fmt(L.addDays(d, L.GESTATION))}.`);
+});
+
 // ---------------- sprzedaż ----------------
 const zl = (n) => { n = Number(n) || 0; const f = Number.isInteger(n) ? 0 : 2; return n.toLocaleString("pl-PL", { minimumFractionDigits: f, maximumFractionDigits: f, useGrouping: "always" }) + " zł"; };
 const writeAny = (kol, a, ch) => (kol === "krowy" ? writeCow : writeCalf)(a.id, { ...rowData(a), ...ch });

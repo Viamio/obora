@@ -170,6 +170,23 @@
 </dialog>
 
 <!-- Zasuszenie: jakim antybiotykiem -->
+<dialog class="sheet" id="insDlg" aria-labelledby="insTitle">
+  <form id="insForm" novalidate>
+    <div class="sheethead"><h2 id="insTitle">Zacielona</h2><button type="button" class="ghost x" id="insCancel" aria-label="Zamknij">✕</button></div>
+    <p class="hint" id="insWho"></p>
+    <label for="insDate">Kiedy zacielona
+      <input id="insDate" type="date">
+    </label>
+    <label for="insByk">Jakim bykiem <small>(nasienie / byk)</small>
+      <input id="insByk" autocomplete="off" list="bykList" placeholder="nazwa lub numer byka">
+    </label>
+    <div class="due"><span>Termin porodu<br>(+280 dni)</span><b id="insDue">—</b></div>
+    <p class="hint" id="insNote" hidden></p>
+    <p class="err" id="insErr" hidden></p>
+    <div class="actions"><button type="submit" class="primary" id="insSave">Zapisz zacielenie</button></div>
+  </form>
+</dialog>
+
 <dialog class="sheet" id="sellDlg" aria-labelledby="sellTitle">
   <form id="sellForm" novalidate>
     <div class="sheethead"><h2 id="sellTitle">Sprzedana</h2><button type="button" class="ghost x" id="sellCancel" aria-label="Zamknij">✕</button></div>
