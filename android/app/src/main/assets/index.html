@@ -113,6 +113,11 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .updBanner span{min-width:0}
 .updBanner.busy b{background:#5a4520;color:var(--fg)}
 .seg3{grid-template-columns:repeat(3,1fr)}
+.seg4{grid-template-columns:repeat(4,1fr)}.seg4 button{padding:12px 4px;font-size:14px}
+.adj{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;border:1px solid var(--line);border-radius:12px;padding:10px}
+.arrows{display:grid;grid-template-columns:repeat(3,44px);grid-template-rows:repeat(3,40px);gap:4px;flex:none}
+.arrows button{border:1px solid var(--line);background:var(--bg);border-radius:8px;font-size:16px;font-weight:700}
+#offU{grid-column:2;grid-row:1}#offL{grid-column:1;grid-row:2}#off0{grid-column:2;grid-row:2;font-family:var(--display)}#offR{grid-column:3;grid-row:2}#offD{grid-column:2;grid-row:3}
 .attrib{position:fixed;left:max(10px,env(safe-area-inset-left,0px));bottom:calc(env(safe-area-inset-bottom,0px) + 158px);font-size:10px;color:#eef3eacc;background:#0009;padding:2px 6px;border-radius:4px;pointer-events:none}
 .icon svg{width:24px;height:24px;display:block}
 .stack{display:flex;flex-direction:column;gap:10px}
@@ -142,6 +147,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
   <button class="icon" id="zin" aria-label="Przybliż">+</button>
   <button class="icon" id="zout" aria-label="Oddal">−</button>
   <button class="icon active" id="center" aria-label="Wyśrodkuj na ciągniku">◎</button>
+  <button class="icon" id="straight" aria-label="Reset pozycji: maszyna na wprost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l-5 6h3.5v12h3V9H17z"/></svg></button>
   <button class="icon" id="trash" aria-label="Usuń zaznaczony obszar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg></button>
   <button class="icon" id="menu" aria-label="Ustawienia">☰</button>
 </div>
@@ -184,8 +190,12 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
     <div><div class="note" style="margin-bottom:6px">Obrót mapy</div>
       <div class="seg"><button id="oHead" class="sel">Kierunek jazdy w górę</button><button id="oNorth">Północ w górę</button></div></div>
     <div><div class="note" style="margin-bottom:6px">Tło mapy</div>
-      <div class="seg seg3" id="bgSeg"><button data-bg="none">Brak</button><button data-bg="sat">Satelita</button><button data-bg="map">Mapa</button></div>
-      <p class="note" style="margin-top:6px">Tło wymaga internetu. Raz obejrzane miejsca zostają w pamięci telefonu.</p></div>
+      <div class="seg seg4" id="bgSeg"><button data-bg="none">Brak</button><button data-bg="orto">Ortofoto PL</button><button data-bg="sat">Satelita</button><button data-bg="map">Mapa</button></div>
+      <p class="note" style="margin-top:6px">Ortofoto PL to aktualne zdjęcia z Geoportalu (GUGiK), dokładnie dopasowane do współrzędnych. Tło wymaga internetu.</p>
+      <div class="adj" id="bgAdj" hidden>
+        <div><div class="note">Przesuń tło, gdy droga nie pokrywa się z obrazem</div><div class="note" id="offTxt" style="color:var(--fg)">bez przesunięcia</div></div>
+        <div class="arrows"><button id="offU" aria-label="Przesuń tło w górę">▲</button><button id="offL" aria-label="Przesuń tło w lewo">◀</button><button id="off0" aria-label="Wyzeruj przesunięcie">0</button><button id="offR" aria-label="Przesuń tło w prawo">▶</button><button id="offD" aria-label="Przesuń tło w dół">▼</button></div>
+      </div></div>
     <div class="upd" id="updBox" hidden>
       <div class="row"><div><b>Aktualizacja</b><div class="note" id="updText">—</div></div><button class="btn" id="updBtn">Sprawdź</button></div>
       <div class="bar" id="updBar" hidden><i id="updFill"></i></div>
@@ -275,11 +285,13 @@ const S={origin:null,pts:[],spraying:false,A:null,B:null,follow:true,headUp:true
   cam:{x:0,y:0},cur:null,heading:Math.PI/2,hdgOk:false,lastP:null,speed:0,acc:null,demo:false,started:false,breakNext:false};
 let cells=new Map(),over=new Set();
 const KEY='gpsPole.v1';
-function save(){if(S.demo)return;lsSet(KEY,{origin:S.origin,pts:S.pts,A:S.A,B:S.B,headUp:S.headUp})}
+function save(){if(S.demo)return;lsSet(KEY,{v:2,origin:S.origin,pts:S.pts,A:S.A,B:S.B,headUp:S.headUp})}
 let saveT=0;function saveSoon(){clearTimeout(saveT);saveT=setTimeout(save,1500)}
 
 /* ---------- geometry ---------- */
-function toLocal(lat,lon){const o=S.origin;return{x:(lon-o.lon)*Math.cos(o.lat*Math.PI/180)*111320,y:(lat-o.lat)*110574}}
+const mLat=f=>{f*=Math.PI/180;return 111132.954-559.822*Math.cos(2*f)+1.175*Math.cos(4*f)};
+const mLon=f=>{f*=Math.PI/180;return 111412.84*Math.cos(f)-93.5*Math.cos(3*f)+0.118*Math.cos(5*f)};
+function toLocal(lat,lon){const o=S.origin;return{x:(lon-o.lon)*mLon(o.lat),y:(lat-o.lat)*mLat(o.lat)}}
 function edges(p){const nx=-Math.sin(p.h),ny=Math.cos(p.h),hw=p.w/2;return[{x:p.x+nx*hw,y:p.y+ny*hw},{x:p.x-nx*hw,y:p.y-ny*hw}]}
 function inTri(px,py,a,b,c){const d1=(px-b.x)*(a.y-b.y)-(a.x-b.x)*(py-b.y),d2=(px-c.x)*(b.y-c.y)-(b.x-c.x)*(py-c.y),d3=(px-a.x)*(c.y-a.y)-(c.x-a.x)*(py-a.y);
   return !(((d1<0)||(d2<0)||(d3<0))&&((d1>0)||(d2>0)||(d3>0)))}
@@ -368,6 +380,7 @@ function onLocal(p,acc,spd,t,brg){
   let hm=null;
   if(hasDop&&brg!=null&&brg>=0&&spd>=0.8)hm=(90-brg)*Math.PI/180;
   else if(fv>=0.8&&!still)hm=Math.atan2(KF.vy,KF.vx);
+  if(hm!=null)S.lastHm=hm;
   if(hm!=null&&steady){if(!S.hdgOk){S.heading=hm;S.hdgOk=true;D.h=hm}else S.heading+=angDiff(S.heading,hm)*(1-Math.exp(-Math.max(dt,0.03)/0.5))}
   if(!S.hdgOk||!steady){ui();return}
   // after work is switched on, start marking only once the tractor has really driven ARM_DIST
@@ -459,36 +472,50 @@ function anchor(){return{x:Wpx/2,y:S.follow&&S.headUp?Hpx*0.5:Hpx*0.48}}
 function angDiff(a,b){let d=b-a;while(d>Math.PI)d-=2*Math.PI;while(d<-Math.PI)d+=2*Math.PI;return d}
 let lastFrame=0,fps=0,fpsN=0,fpsT=0,uiT=0;
 /* background map (Esri World Imagery / World Topo Map) placed on the local metric grid */
-const BG={sat:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/',
-  map:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/'};
-let bgMode=lsGet('gpsPole.bg')||'none';if(!BG[bgMode])bgMode='none';
+const lonOf=(x,n)=>x/n*360-180,latOf=(y,n)=>Math.atan(Math.sinh(Math.PI*(1-2*y/n)))*180/Math.PI;
+const BG={
+  orto:{max:20,shade:.18,attr:'Ortofotomapa: GUGiK, geoportal.gov.pl',
+    url:(z,x,y)=>{const n=2**z;return 'https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WMS/HighResolution?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS=Raster&STYLES=default&FORMAT=image/jpeg&CRS=EPSG:4326&WIDTH=256&HEIGHT=256&BBOX='+
+      latOf(y+1,n).toFixed(7)+','+lonOf(x,n).toFixed(7)+','+latOf(y,n).toFixed(7)+','+lonOf(x+1,n).toFixed(7)}},
+  sat:{max:19,shade:.22,attr:'Zdjęcia: Esri, Maxar, Earthstar Geographics',url:(z,x,y)=>'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/'+z+'/'+y+'/'+x},
+  map:{max:19,shade:.45,attr:'Mapa: Esri, HERE, Garmin, OpenStreetMap',url:(z,x,y)=>'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/'+z+'/'+y+'/'+x}};
+let bgMode=lsGet('gpsPole.bg')||'none';
+if(bgMode==='sat'&&!lsGet('gpsPole.bgMig')){bgMode='orto';lsSet('gpsPole.bgMig',1)}   // old Esri photos → current Polish orthophoto
+if(!BG[bgMode])bgMode='none';
+let bgOff=lsGet('gpsPole.bgOff')||{x:0,y:0};
 const tcache=new Map();let inflight=0,frameNo=0;
 function getTile(z,x,y){const k=bgMode+'/'+z+'/'+x+'/'+y;let t=tcache.get(k);const now=performance.now();
   if(t){t.used=frameNo;if(t.err&&now-t.errAt>30000){tcache.delete(k);t=null}else return t.ok?(t.bm||t.img):null}
   if(inflight>=10)return null;
   t={img:new Image(),ok:false,err:false,used:frameNo};inflight++;
   t.img.onload=()=>{inflight--;if(hasIB)createImageBitmap(t.img).then(bm=>{t.bm=bm;t.ok=true}).catch(()=>{t.ok=true});else t.ok=true};t.img.onerror=()=>{t.err=true;t.errAt=performance.now();inflight--};
-  t.img.src=BG[bgMode]+z+'/'+y+'/'+x;tcache.set(k,t);
+  t.img.src=BG[bgMode].url(z,x,y);tcache.set(k,t);
   if(tcache.size>600){const arr=[...tcache.entries()].sort((a,b)=>a[1].used-b[1].used);for(let i=0;i<150;i++){const e=arr[i][1];if(e.bm)e.bm.close();tcache.delete(arr[i][0])}}
   return null}
 function drawBackground(cx,cy,R,s){
   const o=S.origin;if(!o||bgMode==='none')return false;
-  const cosl=Math.cos(o.lat*Math.PI/180),toLon=x=>o.lon+x/(111320*cosl),toLat=y=>o.lat+y/110574;
-  const lx=lon=>(lon-o.lon)*111320*cosl,ly=lat=>(lat-o.lat)*110574;
-  const z=Math.max(3,Math.min(19,Math.round(Math.log2(156543.03*cosl*s))));
+  const ML=mLat(o.lat),MO=mLon(o.lat),cosl=Math.cos(o.lat*Math.PI/180);
+  cx-=bgOff.x;cy-=bgOff.y;
+  const toLon=x=>o.lon+x/MO,toLat=y=>o.lat+y/ML,lx=lon=>(lon-o.lon)*MO+bgOff.x,ly=lat=>(lat-o.lat)*ML+bgOff.y;
+  const z=Math.max(3,Math.min(BG[bgMode].max,Math.round(Math.log2(156543.03*cosl*s*Math.min(2,dpr)))));
   const lonW=toLon(cx-R),lonE=toLon(cx+R),latS=Math.max(-84,toLat(cy-R)),latN=Math.min(84,toLat(cy+R));
   const tX=(lon,n)=>Math.floor((lon+180)/360*n),tY=(lat,n)=>{const r=lat*Math.PI/180;return Math.floor((1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*n)};
-  const lonOf=(x,n)=>x/n*360-180,latOf=(y,n)=>Math.atan(Math.sinh(Math.PI*(1-2*y/n)))*180/Math.PI;
   ctx.imageSmoothingEnabled=true;
   [z-3,z].forEach(zz=>{if(zz<2)return;const n=2**zz,x0=tX(lonW,n),x1=tX(lonE,n),y0=tY(latN,n),y1=tY(latS,n);
-    if((x1-x0+1)*(y1-y0+1)>90)return;
+    if((x1-x0+1)*(y1-y0+1)>120)return;
     for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++){const img=getTile(zz,x,y);if(!img)continue;
       const X0=lx(lonOf(x,n)),X1=lx(lonOf(x+1,n)),YN=ly(latOf(y,n)),YS=ly(latOf(y+1,n));
       ctx.save();ctx.translate(X0,YN);ctx.scale((X1-X0)/256*1.002,-(YN-YS)/256*1.002);ctx.drawImage(img,0,0);ctx.restore()}});
-  ctx.fillStyle=bgMode==='sat'?'rgba(6,10,6,.22)':'rgba(6,10,6,.45)';ctx.fillRect(cx-R,cy-R,2*R,2*R);
+  ctx.fillStyle='rgba(6,10,6,'+BG[bgMode].shade+')';ctx.fillRect(cx-R+bgOff.x,cy-R+bgOff.y,2*R,2*R);
   return true}
 function setBg(m){bgMode=m;lsSet('gpsPole.bg',m);document.querySelectorAll('#bgSeg button').forEach(b=>b.classList.toggle('sel',b.dataset.bg===m));
-  $('attrib').hidden=m==='none';$('attrib').textContent=m==='sat'?'Zdjęcia: Esri, Maxar, Earthstar Geographics':'Mapa: Esri, HERE, Garmin, OpenStreetMap'}
+  $('attrib').hidden=m==='none';$('bgAdj').hidden=m==='none';if(BG[m])$('attrib').textContent=BG[m].attr;offUi()}
+function offUi(){const f=v=>(v>=0?'+':'−')+fmt(Math.abs(v),1);$('offTxt').textContent=(bgOff.x||bgOff.y)?'wsch. '+f(bgOff.x)+' m · płn. '+f(bgOff.y)+' m':'bez przesunięcia'}
+function nudge(dx,dy){if(dx===0&&dy===0)bgOff={x:0,y:0};else{
+  // arrows move the picture in screen directions, so map them through the current map rotation
+  const r=rot(),c=Math.cos(r),sn=Math.sin(r);bgOff.x=Math.round((bgOff.x+dx*c-dy*sn)*10)/10;bgOff.y=Math.round((bgOff.y+dx*sn+dy*c)*10)/10}
+  lsSet('gpsPole.bgOff',bgOff);offUi()}
+[['offL',-0.5,0],['offR',0.5,0],['offU',0,0.5],['offD',0,-0.5],['off0',0,0]].forEach(([id,dx,dy])=>$(id).addEventListener('click',()=>nudge(dx,dy)));
 document.querySelectorAll('#bgSeg button').forEach(b=>b.addEventListener('click',()=>{setBg(b.dataset.bg);if(b.dataset.bg!=='none'&&!S.origin)toast('Tło pojawi się po złapaniu sygnału GPS.')}));
 
 function frame(ts){
@@ -663,6 +690,17 @@ $('clearAB').addEventListener('click',()=>{S.A=S.B=null;abUi();saveSoon();toast(
 function openClear(){$('clrArea').textContent=fmt(cells.size/10000,2)+' ha';const b=$('clearAll');delete b.dataset.arm;
   b.innerHTML='Usuń cały zaznaczony obszar<small>linia AB i sprzęt zostają</small>';$('clearSheet').hidden=false}
 $('trash').addEventListener('click',openClear);
+/* reset position: implement straight behind the tractor, filter restarted at the latest fix */
+$('straight').addEventListener('click',()=>{
+  if(!D.ok){toast('Brak pozycji GPS.');return}
+  let h=S.lastHm!=null?S.lastHm:S.heading,msg='Maszyna ustawiona na wprost.';
+  if(S.A&&S.B){const ab=Math.atan2(S.B.y-S.A.y,S.B.x-S.A.x),d=angDiff(h,ab),dr=angDiff(h,ab+Math.PI);
+    if(Math.abs(d)<Math.PI/6){h=ab;msg='Maszyna na wprost, wzdłuż linii AB.'}else if(Math.abs(dr)<Math.PI/6){h=ab+Math.PI;msg='Maszyna na wprost, wzdłuż linii AB.'}}
+  S.heading=h;D.h=h;S.hdgOk=true;
+  if(S.cur){KF.px=S.cur.x;KF.py=S.cur.y}KF.vx=KF.vy=0;KF.P00=Math.max(KF.P00,4);
+  TRf.ok=false;TRd.ok=false;S.breakNext=true;
+  S.follow=true;$('center').classList.add('active');
+  toast(msg)});
 $('closeClear').addEventListener('click',()=>$('clearSheet').hidden=true);
 $('cancelClear').addEventListener('click',()=>$('clearSheet').hidden=true);
 $('clearSheet').addEventListener('click',e=>{if(e.target.id==='clearSheet')$('clearSheet').hidden=true});
@@ -701,6 +739,8 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 
 /* start */
 const saved=lsGet(KEY);
+if(saved&&saved.origin&&saved.v!==2){const kx=mLon(saved.origin.lat)/(Math.cos(saved.origin.lat*Math.PI/180)*111320),ky=mLat(saved.origin.lat)/110574;
+  (saved.pts||[]).forEach(q=>{q.x*=kx;q.y*=ky});[saved.A,saved.B].forEach(q=>{if(q){q.x*=kx;q.y*=ky}});saved.v=2;lsSet(KEY,saved)}
 if(saved&&saved.origin){S.origin=saved.origin;S.pts=saved.pts||[];S.A=saved.A;S.B=saved.B;S.headUp=saved.headUp!==false;rebuild();$('resumeNote').hidden=!S.pts.length;S.breakNext=true;
   const l=S.pts[S.pts.length-1];if(l){S.cam.x=l.x;S.cam.y=l.y}}
 toolUi();orientUi();abUi();sprayUi();ui();setBg(bgMode);
