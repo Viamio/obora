@@ -344,7 +344,8 @@ function kfPos(zx,zy,R){let ix=zx-KF.px,iy=zy-KF.py;const S0=KF.P00+R,d2=(ix*ix+
 function kfVel(zvx,zvy,R){const Sv=KF.P11+R,K0=KF.P01/Sv,K1=KF.P11/Sv,ix=zvx-KF.vx,iy=zvy-KF.vy;
   KF.px+=K0*ix;KF.py+=K0*iy;KF.vx+=K1*ix;KF.vy+=K1*iy;
   const P00=KF.P00-K0*KF.P01,P01=(1-K1)*KF.P01,P11=(1-K1)*KF.P11;KF.P00=P00;KF.P01=P01;KF.P11=P11}
-const MOVE=0.45;                     // m/s; below this the tractor counts as standing still
+const MOVE=0.45,ARM_DIST=0.5,STEADY=1.0;   // m/s, m of travel before marking starts, s of steady motion before heading follows
+let movingSince=0,armAt=null,armDist=0;                     // m/s; below this the tractor counts as standing still
 function onLocal(p,acc,spd,t,brg){
   S.acc=acc;const now=performance.now();fixTimes.push(now);while(fixTimes.length&&now-fixTimes[0]>2000)fixTimes.shift();
   if(acc!=null&&acc>25){ui();return}
@@ -361,16 +362,22 @@ function onLocal(p,acc,spd,t,brg){
   F.x=fp.x;F.y=fp.y;F.vx=still?0:KF.vx;F.vy=still?0:KF.vy;F.at=now;if(!D.ok){D.x=fp.x;D.y=fp.y;D.ok=true}
   S.cur=fp;S.speed=hasDop?spd:fv;
   const moving=hasDop?spd>=MOVE:fv>=MOVE;
+  if(moving){if(!movingSince)movingSince=t}else movingSince=0;
+  const steady=moving&&(t-movingSince>=STEADY||S.demo);   // a brief jerk of the phone is not driving
   // heading: Doppler bearing when fast enough, else filtered velocity; held while standing
   let hm=null;
   if(hasDop&&brg!=null&&brg>=0&&spd>=0.8)hm=(90-brg)*Math.PI/180;
   else if(fv>=0.8&&!still)hm=Math.atan2(KF.vy,KF.vx);
-  if(hm!=null){if(!S.hdgOk){S.heading=hm;S.hdgOk=true;D.h=hm}else S.heading+=angDiff(S.heading,hm)*(1-Math.exp(-Math.max(dt,0.03)/0.5))}
-  if(!S.hdgOk||!moving){ui();return}
+  if(hm!=null&&steady){if(!S.hdgOk){S.heading=hm;S.hdgOk=true;D.h=hm}else S.heading+=angDiff(S.heading,hm)*(1-Math.exp(-Math.max(dt,0.03)/0.5))}
+  if(!S.hdgOk||!steady){ui();return}
+  // after work is switched on, start marking only once the tractor has really driven ARM_DIST
+  if(S.spraying&&!armAt)armAt={x:fp.x,y:fp.y};
+  if(S.spraying&&armAt){armDist+=Math.hypot(fp.x-armAt.x,fp.y-armAt.y);armAt={x:fp.x,y:fp.y}}
+  const armed=armDist>=ARM_DIST;
   const tp=toolPose(fp,S.heading,tool(),TRf);
   const last=S.pts[S.pts.length-1];
   if(last&&!S.breakNext&&Math.hypot(tp.x-last.x,tp.y-last.y)<0.5){ui();return}
-  const np={x:tp.x,y:tp.y,h:tp.h,w:tool().w,on:S.spraying&&!!last&&!S.breakNext,t};
+  const np={x:tp.x,y:tp.y,h:tp.h,w:tool().w,on:S.spraying&&armed&&!!last&&!S.breakNext,t};
   S.breakNext=false;S.pts.push(np);
   if(np.on)rasterize(last,np);
   saveSoon();ui();
@@ -511,7 +518,7 @@ function frame(ts){
   tiles.forEach(t=>{const x0=t.tx*TM,y0=t.ty*TM;if(x0>cx+R||x0+TM<cx-R||y0>cy+R||y0+TM<cy-R)return;
     ctx.save();ctx.translate(x0,y0+TM);ctx.scale(1/TPX,-1/TPX);ctx.drawImage(t.bm&&!t.dirty?t.bm:t.c,0,0);ctx.restore()});
   const lp=S.pts[S.pts.length-1];
-  if(S.spraying&&lp&&D.ok&&S.hdgOk){const d=Math.hypot(DT.x-lp.x,DT.y-lp.y);if(d>0.05&&d<10){
+  if(S.spraying&&armDist>=ARM_DIST&&lp&&lp.on!==undefined&&D.ok&&S.hdgOk){const d=Math.hypot(DT.x-lp.x,DT.y-lp.y);if(d>0.05&&d<10){
     const [L1,R1]=edges(lp),[L2,R2]=edges({x:DT.x,y:DT.y,h:DT.h,w:tl.w});
     ctx.beginPath();ctx.moveTo(L1.x,L1.y);ctx.lineTo(L2.x,L2.y);ctx.lineTo(R2.x,R2.y);ctx.lineTo(R1.x,R1.y);ctx.closePath();ctx.fillStyle='#6fd66f';ctx.fill()}}
   ctx.globalAlpha=1;
@@ -641,7 +648,7 @@ $('stChange').addEventListener('click',openTools);
 $('setChange').addEventListener('click',()=>{$('settings').hidden=true;openTools()});
 
 /* main controls */
-$('spray').addEventListener('click',()=>{S.spraying=!S.spraying;sprayUi()});
+$('spray').addEventListener('click',()=>{S.spraying=!S.spraying;armDist=0;armAt=S.spraying&&S.cur?{x:S.cur.x,y:S.cur.y}:null;if(S.spraying)S.breakNext=true;sprayUi()});
 $('ab').addEventListener('click',()=>{if(!D.ok||!S.hdgOk){toast('Najpierw podjedź kilka metrów, żeby złapać kierunek jazdy.');return}
   const p={x:DT.x,y:DT.y};
   if(!S.A){S.A=p;toast('Punkt A ustawiony. Przejedź pas i ustaw B.')}
