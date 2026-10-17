@@ -318,7 +318,7 @@ function paintPoly(q,color){const xs=q.map(v=>v.x),ys=q.map(v=>v.y);
   for(let tx=Math.floor(Math.min(...xs)/TM);tx<=Math.floor(Math.max(...xs)/TM);tx++)for(let ty=Math.floor(Math.min(...ys)/TM);ty<=Math.floor(Math.max(...ys)/TM);ty++){
     const tl=tileAt(tx,ty),g=tl.g;tl.dirty=true;g.beginPath();g.moveTo(q[0].x,q[0].y);for(let i=1;i<q.length;i++)g.lineTo(q[i].x,q[i].y);g.closePath();g.fillStyle=color;g.fill()}}
 function rasterize(p1,p2){
-  if(Math.hypot(p2.x-p1.x,p2.y-p1.y)>15)return;
+  const segL=Math.hypot(p2.x-p1.x,p2.y-p1.y);if(segL>(p2.t-p1.t<=8?35:15))return;
   const [L1,R1]=edges(p1),[L2,R2]=edges(p2),q=[L1,L2,R2,R1];
   const minx=Math.floor(Math.min(...q.map(v=>v.x))),maxx=Math.floor(Math.max(...q.map(v=>v.x)));
   const miny=Math.floor(Math.min(...q.map(v=>v.y))),maxy=Math.floor(Math.max(...q.map(v=>v.y)));
@@ -432,6 +432,7 @@ window.nativeFix=function(lat,lon,acc,spd,brg,ms){
   onLocal(toLocal(lat,lon),acc,spd>=0?spd:null,ms/1000,brg>=0?brg:null);
 };
 window.nativeGpsStatus=function(m){gpsMsg=m};
+let sats=null;window.nativeSats=function(u,n){sats={u,n}};
 function startGps(){
   if(nativeOn)return;
   if(!window.isSecureContext){gpsMsg='GPS zablokowany: otwórz aplikację z adresu https, nie z pliku.';toast(gpsMsg);return}
@@ -551,7 +552,7 @@ function frame(ts){
     if(S.started&&!document.hidden){slowSecs=fps<40?slowSecs+1:0;if(slowSecs>=2&&quality>0.45){quality=Math.max(0.45,quality*0.75);slowSecs=0;resize()}}
     perfUi()}
   const tl=tool();
-  if(D.ok){const age=Math.min(2,(performance.now()-F.at)/1000),px=F.x+F.vx*age,py=F.y+F.vy*age,k=1-Math.exp(-dt*14);
+  if(D.ok){const age=Math.min(6,(performance.now()-F.at)/1000),px=F.x+F.vx*age,py=F.y+F.vy*age,k=1-Math.exp(-dt*14);
     D.x+=(px-D.x)*k;D.y+=(py-D.y)*k;D.h+=angDiff(D.h,S.heading)*(1-Math.exp(-dt*8));
     DT=toolPose(D,D.h,tl,TRd)}
   if(ts-uiT>70){uiT=ts;lightbar();gapUi()}
@@ -571,7 +572,7 @@ function frame(ts){
   tiles.forEach(t=>{const x0=t.tx*TM,y0=t.ty*TM;if(x0>cx+R||x0+TM<cx-R||y0>cy+R||y0+TM<cy-R)return;
     ctx.save();ctx.translate(x0,y0+TM);ctx.scale(1/TPX,-1/TPX);ctx.drawImage(t.bm&&!t.dirty?t.bm:t.c,0,0);ctx.restore()});
   const lp=S.pts[S.pts.length-1];
-  if(S.spraying&&armDist>=ARM_DIST&&lp&&lp.on!==undefined&&D.ok&&S.hdgOk){const d=Math.hypot(DT.x-lp.x,DT.y-lp.y);if(d>0.05&&d<10){
+  if(S.spraying&&armDist>=ARM_DIST&&lp&&lp.on!==undefined&&D.ok&&S.hdgOk){const d=Math.hypot(DT.x-lp.x,DT.y-lp.y);if(d>0.05&&d<35){
     const [L1,R1]=edges(lp),[L2,R2]=edges({x:DT.x,y:DT.y,h:DT.h,w:tl.w});
     ctx.beginPath();ctx.moveTo(L1.x,L1.y);ctx.lineTo(L2.x,L2.y);ctx.lineTo(R2.x,R2.y);ctx.lineTo(R1.x,R1.y);ctx.closePath();ctx.fillStyle='#6fd66f';ctx.fill()}}
   ctx.globalAlpha=1;
@@ -620,10 +621,10 @@ function ui(){
 }
 let gapShown=false;
 function gapUi(){if(!S.started||S.demo||!gotFix)return;const g=(performance.now()-lastFixAt)/1000;
-  if(g>3){gapShown=true;$('sAcc').textContent=Math.round(g)+' s';$('sAccBox').classList.add('warn');$('sAccLbl').textContent='brak odczytu GPS'}
+  if(g>3){gapShown=true;$('sAcc').textContent=Math.round(g)+' s';$('sAccBox').classList.add('warn');$('sAccLbl').textContent='brak GPS'+(sats?' · '+sats.u+' sat':'')}
   else if(gapShown){gapShown=false;ui();perfUi()}}
 function perfUi(){if(gapShown)return;const hz=fixTimes.length>1?(fixTimes.length-1)*1000/(fixTimes[fixTimes.length-1]-fixTimes[0]):0;
-  $('sAccLbl').textContent='± m · '+fmt(hz,0)+' Hz';$('perf').textContent='Ekran: '+fps+' kl./s'+(quality<1?' (rozdzielczość '+Math.round(quality*100)+'%)':'')+' · GPS: '+fmt(hz,1)+' odczytów/s'+(nativeOn?' (moduł GPS telefonu)':S.demo?' (demo)':'')}
+  $('sAccLbl').textContent='± m · '+fmt(hz,0)+' Hz'+(sats?' · '+sats.u+' sat':'');$('perf').textContent='Ekran: '+fps+' kl./s'+(quality<1?' (rozdzielczość '+Math.round(quality*100)+'%)':'')+' · GPS: '+fmt(hz,1)+' odczytów/s'+(sats?' · satelity: '+sats.u+' z '+sats.n:'')+(nativeOn?'':S.demo?' (demo)':'')}
 let lbKey='';
 function lightbar(){
   const g=guidance();
