@@ -377,6 +377,20 @@ function onLocal(p,acc,spd,t,brg){
   if(moving){if(!movingSince)movingSince=t}else movingSince=0;
   const steady=moving&&(t-movingSince>=STEADY||S.demo);   // a brief jerk of the phone is not driving
   // heading: Doppler bearing when fast enough, else filtered velocity; held while standing
+  // after "reset position": take the first real movement (from 0.1 km/h) as the travel direction
+  if(S.capture){
+    if(t-S.capture.t>90){S.capture=null;toast('Nie wykryto ruchu. Dotknij przycisk ponownie i ruszaj.')}
+    else{let hc=null;
+      if(hasDop&&brg!=null&&brg>=0&&spd>=0.028)hc=(90-brg)*Math.PI/180;
+      else{S.capture.n++;S.capture.sx+=p.x;S.capture.sy+=p.y;
+        const mx=S.capture.sx/S.capture.n,my=S.capture.sy/S.capture.n,dx=mx-S.capture.x,dy=my-S.capture.y;
+        if(Math.hypot(dx,dy)>=Math.max(0.6,(acc||3)*0.35)&&S.capture.n>=2)hc=Math.atan2(dy,dx)}
+      if(hc!=null){
+        if(S.A&&S.B){const ab=Math.atan2(S.B.y-S.A.y,S.B.x-S.A.x);
+          if(Math.abs(angDiff(hc,ab))<Math.PI/6)hc=ab;else if(Math.abs(angDiff(hc,ab+Math.PI))<Math.PI/6)hc=ab+Math.PI}
+        S.heading=hc;D.h=hc;S.hdgOk=true;TRf.ok=false;TRd.ok=false;S.breakNext=true;S.capture=null;
+        if(!movingSince)movingSince=t-STEADY;
+        toast('Kierunek jazdy ustalony. Maszyna na wprost.')}}}
   let hm=null;
   if(hasDop&&brg!=null&&brg>=0&&spd>=0.8)hm=(90-brg)*Math.PI/180;
   else if(fv>=0.8&&!still)hm=Math.atan2(KF.vy,KF.vx);
@@ -693,13 +707,14 @@ $('trash').addEventListener('click',openClear);
 /* reset position: implement straight behind the tractor, filter restarted at the latest fix */
 $('straight').addEventListener('click',()=>{
   if(!D.ok){toast('Brak pozycji GPS.');return}
-  let h=S.lastHm!=null?S.lastHm:S.heading,msg='Maszyna ustawiona na wprost.';
+  let h=S.heading,msg='Ruszaj powoli. Ustalę kierunek z pierwszego ruchu.';
   if(S.A&&S.B){const ab=Math.atan2(S.B.y-S.A.y,S.B.x-S.A.x),d=angDiff(h,ab),dr=angDiff(h,ab+Math.PI);
-    if(Math.abs(d)<Math.PI/6){h=ab;msg='Maszyna na wprost, wzdłuż linii AB.'}else if(Math.abs(dr)<Math.PI/6){h=ab+Math.PI;msg='Maszyna na wprost, wzdłuż linii AB.'}}
+    if(Math.abs(d)<Math.PI/6)h=ab;else if(Math.abs(dr)<Math.PI/6)h=ab+Math.PI}
   S.heading=h;D.h=h;S.hdgOk=true;
   if(S.cur){KF.px=S.cur.x;KF.py=S.cur.y}KF.vx=KF.vy=0;KF.P00=Math.max(KF.P00,4);
   TRf.ok=false;TRd.ok=false;S.breakNext=true;
   S.follow=true;$('center').classList.add('active');
+  const c=S.cur||{x:D.x,y:D.y};S.capture={t:KF.t||0,x:c.x,y:c.y,sx:0,sy:0,n:0};
   toast(msg)});
 $('closeClear').addEventListener('click',()=>$('clearSheet').hidden=true);
 $('cancelClear').addEventListener('click',()=>$('clearSheet').hidden=true);
