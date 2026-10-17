@@ -348,21 +348,33 @@ function kfInit(p,R){Object.assign(KF,{ok:true,px:p.x,py:p.y,vx:0,vy:0,P00:R,P01
 function kfPredict(dt){KF.px+=KF.vx*dt;KF.py+=KF.vy*dt;
   const P00=KF.P00+2*dt*KF.P01+dt*dt*KF.P11+KQ*dt*dt*dt/3,P01=KF.P01+dt*KF.P11+KQ*dt*dt/2,P11=KF.P11+KQ*dt;
   KF.P00=P00;KF.P01=P01;KF.P11=P11}
+let kfOut=0;
 function kfPos(zx,zy,R){let ix=zx-KF.px,iy=zy-KF.py;const S0=KF.P00+R,d2=(ix*ix+iy*iy)/S0;
-  if(d2>16)R*=d2/16;                 // soft outlier rejection: a jump of many sigma counts for little
+  if(d2>16){kfOut++;
+    if(kfOut>=2){KF.px=zx;KF.py=zy;KF.P00=R;KF.P01=0;KF.P11=Math.max(KF.P11,4);kfOut=0;return}   // filter fell behind: jump to GPS
+    R*=d2/16}                        // single outlier: counts for little
+  else kfOut=0;
   const Sv=KF.P00+R,K0=KF.P00/Sv,K1=KF.P01/Sv;
   KF.px+=K0*ix;KF.py+=K0*iy;KF.vx+=K1*ix;KF.vy+=K1*iy;
   const P00=(1-K0)*KF.P00,P01=(1-K0)*KF.P01,P11=KF.P11-K1*KF.P01;KF.P00=P00;KF.P01=P01;KF.P11=P11}
 function kfVel(zvx,zvy,R){const Sv=KF.P11+R,K0=KF.P01/Sv,K1=KF.P11/Sv,ix=zvx-KF.vx,iy=zvy-KF.vy;
   KF.px+=K0*ix;KF.py+=K0*iy;KF.vx+=K1*ix;KF.vy+=K1*iy;
   const P00=KF.P00-K0*KF.P01,P01=(1-K1)*KF.P01,P11=(1-K1)*KF.P11;KF.P00=P00;KF.P01=P01;KF.P11=P11}
+let rawHist=[],lastFixAt=0;
 const MOVE=0.45,ARM_DIST=0.5,STEADY=1.0;   // m/s, m of travel before marking starts, s of steady motion before heading follows
 let movingSince=0,armAt=null,armDist=0;                     // m/s; below this the tractor counts as standing still
 function onLocal(p,acc,spd,t,brg){
   S.acc=acc;const now=performance.now();fixTimes.push(now);while(fixTimes.length&&now-fixTimes[0]>2000)fixTimes.shift();
-  if(acc!=null&&acc>25){ui();return}
+  lastFixAt=now;
+  if(acc!=null&&acc>80){ui();return}
   const sig=Math.max(0.5,(acc||5)*0.7),R=sig*sig;
-  const hasDop=spd!=null&&spd>=0,still=hasDop&&spd<MOVE;
+  rawHist.push({x:p.x,y:p.y,t});while(rawHist.length>2&&t-rawHist[0].t>6)rawHist.shift();
+  let posMoving=false,posSpd=0;
+  if(rawHist.length>=3){const a=rawHist[0],z=rawHist[rawHist.length-1],dd=Math.hypot(z.x-a.x,z.y-a.y),tt=z.t-a.t;
+    posSpd=tt>0?dd/tt:0;posMoving=tt>=2&&dd>Math.max(3,1.6*(acc||3))&&posSpd>MOVE}
+  let hasDop=spd!=null&&spd>=0;
+  if(hasDop&&spd<MOVE&&posMoving){hasDop=false;spd=null}   // chip says 0 but we are driving: ignore its speed
+  const still=hasDop&&spd<MOVE;
   const dt=KF.ok?Math.max(0.01,t-KF.t):0;
   if(!KF.ok||dt>6)kfInit(p,R);
   else{kfPredict(dt);
@@ -372,8 +384,8 @@ function onLocal(p,acc,spd,t,brg){
   KF.t=t;
   const fp={x:KF.px,y:KF.py},fv=Math.hypot(KF.vx,KF.vy);
   F.x=fp.x;F.y=fp.y;F.vx=still?0:KF.vx;F.vy=still?0:KF.vy;F.at=now;if(!D.ok){D.x=fp.x;D.y=fp.y;D.ok=true}
-  S.cur=fp;S.speed=hasDop?spd:fv;
-  const moving=hasDop?spd>=MOVE:fv>=MOVE;
+  S.cur=fp;S.speed=hasDop?spd:Math.max(fv,posSpd);
+  const moving=hasDop?spd>=MOVE:(fv>=MOVE||posMoving);
   if(moving){if(!movingSince)movingSince=t}else movingSince=0;
   const steady=moving&&(t-movingSince>=STEADY||S.demo);   // a brief jerk of the phone is not driving
   // heading: Doppler bearing when fast enough, else filtered velocity; held while standing
@@ -409,7 +421,7 @@ function onLocal(p,acc,spd,t,brg){
   if(np.on)rasterize(last,np);
   saveSoon();ui();
 }
-function resetTrack(){KF.ok=false;S.hdgOk=false;TRf.ok=false;TRd.ok=false;S.breakNext=true}
+function resetTrack(){KF.ok=false;rawHist=[];kfOut=0;S.hdgOk=false;TRf.ok=false;TRd.ok=false;S.breakNext=true}
 
 /* ---------- GPS: native feed from the app (30/s), browser as fallback ---------- */
 let watchId=null,nativeOn=false,gpsMsg='Czekam na sygnał GPS…',gotFix=false;
@@ -539,10 +551,10 @@ function frame(ts){
     if(S.started&&!document.hidden){slowSecs=fps<40?slowSecs+1:0;if(slowSecs>=2&&quality>0.45){quality=Math.max(0.45,quality*0.75);slowSecs=0;resize()}}
     perfUi()}
   const tl=tool();
-  if(D.ok){const age=Math.min(1,(performance.now()-F.at)/1000),px=F.x+F.vx*age,py=F.y+F.vy*age,k=1-Math.exp(-dt*14);
+  if(D.ok){const age=Math.min(2,(performance.now()-F.at)/1000),px=F.x+F.vx*age,py=F.y+F.vy*age,k=1-Math.exp(-dt*14);
     D.x+=(px-D.x)*k;D.y+=(py-D.y)*k;D.h+=angDiff(D.h,S.heading)*(1-Math.exp(-dt*8));
     DT=toolPose(D,D.h,tl,TRd)}
-  if(ts-uiT>70){uiT=ts;lightbar()}
+  if(ts-uiT>70){uiT=ts;lightbar();gapUi()}
   if(S.follow&&D.ok){if(S.hdgOk){S.cam.x=(D.x+DT.x)/2;S.cam.y=(D.y+DT.y)/2}else{S.cam.x=D.x;S.cam.y=D.y}}
   const s=S.zoom,a=anchor(),r=rot();
   ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#0e130f';ctx.fillRect(0,0,Wpx,Hpx);
@@ -606,7 +618,11 @@ function ui(){
   if(S.acc==null)$('sAcc').textContent='—';else $('sAcc').innerHTML=S.acc<=3?'<span class="ok">'+fmt(S.acc,1)+'</span>':fmt(S.acc,1);
   $('sAccBox').classList.toggle('warn',S.acc!=null&&S.acc>8);
 }
-function perfUi(){const hz=fixTimes.length>1?(fixTimes.length-1)*1000/(fixTimes[fixTimes.length-1]-fixTimes[0]):0;
+let gapShown=false;
+function gapUi(){if(!S.started||S.demo||!gotFix)return;const g=(performance.now()-lastFixAt)/1000;
+  if(g>3){gapShown=true;$('sAcc').textContent=Math.round(g)+' s';$('sAccBox').classList.add('warn');$('sAccLbl').textContent='brak odczytu GPS'}
+  else if(gapShown){gapShown=false;ui();perfUi()}}
+function perfUi(){if(gapShown)return;const hz=fixTimes.length>1?(fixTimes.length-1)*1000/(fixTimes[fixTimes.length-1]-fixTimes[0]):0;
   $('sAccLbl').textContent='± m · '+fmt(hz,0)+' Hz';$('perf').textContent='Ekran: '+fps+' kl./s'+(quality<1?' (rozdzielczość '+Math.round(quality*100)+'%)':'')+' · GPS: '+fmt(hz,1)+' odczytów/s'+(nativeOn?' (moduł GPS telefonu)':S.demo?' (demo)':'')}
 let lbKey='';
 function lightbar(){
