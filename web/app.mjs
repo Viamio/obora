@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "4.0";
+export const APP_VERSION = "4.1";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -88,13 +88,15 @@ const autoDone = new Set();
 function autoQueue() {
   if (!farm || !loaded || !queueLoaded) return;
   const today = L.todayISO();
-  for (const { cow: c, date } of L.rujaQueue(cows, today)) {
+  const heifers = calves.filter((c) => typOf(c) === "jalowka");
+  for (const { cow: c, date } of L.rujaQueue([...cows, ...heifers], today)) {
     const key = c.id + date;
     if (autoDone.has(key)) continue;
     autoDone.add(key);
     if (!queue.some((q) => sameTag(q.kolczyk, c.kolczyk)))
       setDoc(doc(queueCol(farm), L.rujaQueueId(c, date)), { kolczyk: c.kolczyk, miejsce: placeOf(c), dodano: today, zmieniono: Date.now(), auto: "ruja", ruja: date }).catch(() => {});
-    writeCow(c.id, { ...rowData(c), kolejkaRuja: date });
+    if (cows.includes(c)) writeCow(c.id, { ...rowData(c), kolejkaRuja: date });
+    else writeCalf(c.id, { ...rowData(c), kolejkaRuja: date });
   }
   for (const q of queue) {
     const a = findAnimal(q.kolczyk);
@@ -113,7 +115,7 @@ let loaded = false;
 let query = "";
 const NO_PLACE = "__brak";
 const placeOf = (a) => (a.miejsce || "").trim();
-let tab = LS.get("obora_tab") || "glowna";   // glowna | m:<miejsce> | m:__brak | cielaki | jalowki | ustawienia
+let tab = "glowna";   // po włączeniu zawsze Główna   // glowna | m:<miejsce> | m:__brak | cielaki | jalowki | ustawienia
 let calfMode = "cielak";
 /** Typ młodego zwierzęcia: "cielak" albo "jalowka" (stare wpisy bez typu: byczek = cielak, jałówka od 6 mies. = jałówka). */
 function typOf(c) {
@@ -343,7 +345,8 @@ function placeSelect(sel, value) {
 
 // ---------------- zakładki ----------------
 function tabList() {
-  const t = [{ key: "glowna", label: "Główna" }, { key: "zacielenie", label: "Do zacielenia", n: queue.length }];
+  const t = [{ key: "powiadomienia", label: "Powiadomienia", n: allAlerts(cows, calves, cfg.ahead, 14).length },
+    { key: "glowna", label: "Główna" }, { key: "zacielenie", label: "Do zacielenia", n: queue.length }];
   for (const p of places()) t.push({ key: "m:" + p, label: p, n: cows.filter(inPlace(p)).length + calves.filter(inPlace(p)).length });
   const none = cows.filter(inPlace(NO_PLACE)).length + calves.filter(inPlace(NO_PLACE)).length;
   if (none && places().length) t.push({ key: "m:" + NO_PLACE, label: "Bez miejsca", n: none });
@@ -403,13 +406,14 @@ function render(dir = 0) {
   const v = $("view");
   v.replaceChildren();
   if (tab === "glowna") viewMain(v);
+  else if (tab === "powiadomienia") { v.append(statsRow(cows)); alertsSection(v, cows, calves, "Powiadomienia"); }
   else if (tab === "zacielenie") viewQueue(v);
   else if (tab === "cielaki" || tab === "jalowki") viewCalves(v, tab === "cielaki" ? "cielak" : "jalowka");
   else if (tab === "ustawienia") viewSettings(v);
   else if (tab === "sprzedaz") viewSales(v);
   else viewPlace(v, tab.slice(2));
   $("fab").textContent = tab === "cielaki" ? "+ Dodaj cielaka" : tab === "jalowki" ? "+ Dodaj jałówkę" : "+ Dodaj";
-  $("fab").hidden = tab === "ustawienia" || tab === "zacielenie" || tab === "sprzedaz";
+  $("fab").hidden = tab === "ustawienia" || tab === "zacielenie" || tab === "sprzedaz" || tab === "powiadomienia";
   if (dir) { v.classList.remove("in-l", "in-r"); void v.offsetWidth; v.classList.add(dir > 0 ? "in-r" : "in-l"); }
 }
 
@@ -449,7 +453,13 @@ function viewMain(v) {
   sum.append(grid);
   v.append(sum);
   v.append(statsRow(cows));
-  alertsSection(v, cows, calves);
+  // zadania są w osobnej zakładce „Powiadomienia” – tu tylko skrót
+  const na = allAlerts(cows, calves, cfg.ahead, 14);
+  const urgent = na.filter((a) => a.n <= 0 || a.kind === "karencja").length;
+  const go = el("button", "gotasks" + (urgent ? " hot" : "")); go.type = "button";
+  go.append(el("span", "gtn", String(na.length)), el("span", "gtt", na.length ? `${odm(na.length, "zadanie", "zadania", "zadań")} do zrobienia${urgent ? ` · ${urgent} na dziś lub zaległe` : ""}` : "Brak zadań na najbliższe dni"), el("span", "gta", "Powiadomienia →"));
+  go.onclick = () => setTab("powiadomienia", -1);
+  v.append(go);
   // pełna lista całego stada z wyszukiwarką
   const s = el("input"); s.type = "search"; s.id = "szukaj"; s.placeholder = "Szukaj kolczyka, byka, matki…"; s.value = query;
   s.oninput = () => { query = s.value; renderSearch(); };
@@ -1345,7 +1355,7 @@ function viewQueue(v) {
     left.append(tagEl(a, q.kolczyk));
     left.append(el("span", "chip", a ? (cows.includes(a) ? "Krowa" : kindLabel(a)) : "Spoza stada"));
     if (q.auto === "ruja") left.append(el("span", "chip ruja", `Ruja ${q.ruja ? L.fmt(q.ruja).slice(0, 5) : ""}`));
-    if (a && L.pregnant(a)) left.append(el("span", "chip no", "Uwaga: cielna"));
+    if (a && L.pregnant(a)) left.append(a.cielna === "tak" ? el("span", "chip no", "Uwaga: cielna") : el("span", "chip", `zacielona ${L.fmt(a.zacielenie2 || a.zacielenie).slice(0, 5)}, niezbadana`));
     top.append(left, el("span", "pill none", q.dodano ? `dodana ${L.fmt(q.dodano)}` : ""));
     row.append(top);
     if (a) withPhoto(top, a);

@@ -66,13 +66,14 @@ export function rujaQueue(cows, today = todayISO()) {
   const out = [];
   for (const c of cows) {
     if (pregnant(c) && c.cielna === "tak") continue;
-    const zac = pregnant(c); // zacielona, niezbadana: tylko wpisana ruja (wróciła) wrzuca na listę
-    for (const date of zac ? [c.ruja] : [c.ruja, nextRuja(c, today)]) {
+    // wpisana ruja albo spodziewana (co 21 dni od rui / zacielenia) – także u zacielonej, niezbadanej
+    for (const date of [c.ruja, nextRuja(c, today)]) {
       if (!date) continue;
       if (c.zacielenie2 && c.zacielenie2 >= date) continue;
       const n = daysBetween(today, date);
       if (n > 1 || n < -2) continue;
       if (c.kolejkaRuja === date || (c.zacielenie && c.zacielenie >= date)) continue;
+      if (c.typ === "cielak" || c.plec === "b") continue;
       out.push({ cow: c, date });
       break;
     }

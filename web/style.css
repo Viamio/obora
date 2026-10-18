@@ -294,3 +294,10 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .saletotal>div.wide{grid-column:1/-1}
 .saletotal .wide b{font-size:1.15rem;white-space:normal}
 .salerow .kgline{font-size:.85rem;font-weight:600;color:var(--fg);font-variant-numeric:tabular-nums}
+/* skrót do Powiadomień na Głównej */
+.gotasks{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--surface);border:1.5px solid var(--line);border-radius:14px;padding:12px 14px;font:inherit;color:var(--fg);cursor:pointer}
+.gotasks .gtn{font-family:var(--display);font-weight:700;font-size:1.9rem;line-height:1;min-width:1.4em;text-align:center;color:var(--accent)}
+.gotasks .gtt{flex:1;font-weight:600}
+.gotasks .gta{color:var(--accent);font-weight:600;font-size:.9rem;white-space:nowrap}
+.gotasks.hot{border-color:var(--warn);background:var(--warn-bg)}
+.gotasks.hot .gtn{color:var(--warn)}

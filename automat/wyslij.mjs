@@ -23,10 +23,11 @@ for (const ref of farms) {
   const cows = (await ref.collection("krowy").get()).docs.map((d) => ({ id: d.id, ...d.data() })).filter((c) => !c.sprzedana);
   // krowy w rui i niecielne → same trafiają na listę „Do zacielenia”
   const queue = (await ref.collection("dozacielenia").get()).docs.map((d) => d.data().kolczyk);
-  for (const { cow: c, date } of rujaQueue(cows, today)) {
+  const heifers = (await ref.collection("mlodziez").get()).docs.map((d) => ({ id: d.id, ...d.data(), _kol: "mlodziez" })).filter((c) => !c.sprzedana && (c.typ === "jalowka" || (!c.typ && c.plec !== "b")));
+  for (const { cow: c, date } of rujaQueue([...cows, ...heifers], today)) {
     if (!queue.includes(c.kolczyk))
       await ref.collection("dozacielenia").doc(rujaQueueId(c, date)).set({ kolczyk: c.kolczyk, miejsce: c.miejsce || "", dodano: today, zmieniono: Date.now(), auto: "ruja", ruja: date });
-    await ref.collection("krowy").doc(c.id).set({ kolejkaRuja: date }, { merge: true });
+    await ref.collection(c._kol || "krowy").doc(c.id).set({ kolejkaRuja: date }, { merge: true });
     c.kolejkaRuja = date;
     console.log(`Do zacielenia (ruja): ${c.kolczyk}`);
   }
