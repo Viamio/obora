@@ -305,3 +305,8 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .dupwarn>b{color:var(--soon);font-size:1.05rem}
 .dupwarn>small{color:var(--fg)}
 .duprow{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tagsug .tsim{display:flex;flex-direction:column;gap:2px;background:var(--warn-bg);border-radius:10px;padding:10px 12px}
+.tagsug .tsim b{color:var(--warn)}
+.tagsug .tsim small{color:var(--muted)}
+.dupwarn.sim{background:var(--warn-bg);border-color:var(--warn)}
+.dupwarn.sim>b{color:var(--warn)}

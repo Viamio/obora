@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "4.2";
+export const APP_VERSION = "4.3";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -262,7 +262,30 @@ function duplicateTags() {
   for (const a of [...cows, ...calves]) { const k = L.tagKey(a.kolczyk); if (!k) continue; if (!m.has(k)) m.set(k, []); m.get(k).push(a); }
   return [...m.values()].filter((g) => g.length > 1);
 }
+/** Pary podobnych numerów (4 i 5 cyfr), których nikt nie oznaczył jako różne sztuki. */
+function similarPairs() {
+  const all = [...cows, ...calves], ok = new Set(cfg.rozne || []), out = [];
+  for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) {
+    const a = all[i], b = all[j];
+    if (!L.similarTag(a.kolczyk, b.kolczyk)) continue;
+    const key = [a.id, b.id].sort().join("|");
+    if (!ok.has(key)) out.push([a, b, key]);
+  }
+  return out;
+}
 function dupWarning(v) {
+  const pairs = similarPairs();
+  if (pairs.length) {
+    const box = el("section", "dupwarn sim");
+    box.append(el("b", null, `Możliwe powtórzenia (${pairs.length})`), el("small", null, "Numery różnią się tylko długością (np. 4 i 5 cyfr). Sprawdź, czy to ta sama sztuka."));
+    for (const [a, b, key] of pairs) {
+      const row = el("div", "duprow");
+      for (const x of [a, b]) row.append(btn(`${x.kolczyk} · ${animalKind(x)}${placeOf(x) ? " · " + placeOf(x) : ""} – Edytuj`, "ghost sm", () => cows.includes(x) ? openCow(x) : openCalf(x)));
+      row.append(btn("To różne sztuki", "ghost sm", () => { saveCfg({ ...cfg, rozne: [...(cfg.rozne || []), key] }, `${a.kolczyk} i ${b.kolczyk}: oznaczone jako różne.`); render(); }));
+      box.append(row);
+    }
+    v.append(box);
+  }
   const groups = duplicateTags();
   if (!groups.length) return;
   const box = el("section", "dupwarn");
@@ -337,6 +360,12 @@ function tagAssist(input, { selfId = () => null, dupError = true, saveBtn = null
       box.hidden = false; setBad(true); return;
     }
     setBad(false);
+    const sim = allAnimals().filter((a) => a.id !== selfId() && L.similarTag(a.kolczyk, v));
+    if (sim.length && dupError) {
+      const w = el("div", "tsim");
+      w.append(el("b", null, "Uwaga: bardzo podobny numer już jest"), el("span", null, sim.map((a) => `${a.kolczyk} – ${animalDesc(a)}`).join("; ")), el("small", null, "Sprawdź, czy to nie ta sama sztuka (4 i 5 cyfr). Jeśli to inna – zapisz normalnie."));
+      box.append(w);
+    }
     const match = (a) => {
       if (a.id === selfId()) return false;
       const t = tagNorm(a.kolczyk);
@@ -344,7 +373,7 @@ function tagAssist(input, { selfId = () => null, dupError = true, saveBtn = null
     };
     const list = d.length >= 2 || v.length >= 2
       ? allAnimals().filter(match).sort((a, b) => tagDigits(a.kolczyk).localeCompare(tagDigits(b.kolczyk))) : [];
-    if (!list.length) { box.hidden = true; return; }
+    if (!list.length) { box.hidden = !box.children.length; return; }
     box.append(el("span", "tshead", `Podobne numery (${list.length}):`));
     const wrap = el("div", "tsl");
     for (const a of list.slice(0, 12)) {

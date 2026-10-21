@@ -105,6 +105,17 @@ export function tagKey(k) {
   const t = String(k || "").toUpperCase().replace(/\s+/g, ""), d = t.replace(/\D/g, "");
   return d.length >= 3 ? d : t;
 }
+/**
+ * Podobny kolczyk (możliwe powtórzenie): krótszy numer (min. 4 cyfry) to koniec dłuższego,
+ * albo numery różnią się jedną cyfrą długości i krótszy jest początkiem dłuższego. Np. 2345 ~ 12345, 1234 ~ 12345.
+ */
+export function similarTag(a, b) {
+  const x = String(a || "").replace(/\D/g, ""), y = String(b || "").replace(/\D/g, "");
+  if (!x || !y || x === y) return false;
+  const [s, l] = x.length <= y.length ? [x, y] : [y, x];
+  if (s.length < 4) return false;
+  return l.endsWith(s) || (l.length - s.length === 1 && l.startsWith(s));
+}
 export const rujaQueueId = (c, date) => `r-${c.id}-${date}`;
 export function insemDate(c, cfg) {
   if (!c.wycielenie) return null;
