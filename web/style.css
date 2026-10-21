@@ -301,3 +301,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .gotasks .gta{color:var(--accent);font-weight:600;font-size:.9rem;white-space:nowrap}
 .gotasks.hot{border-color:var(--warn);background:var(--warn-bg)}
 .gotasks.hot .gtn{color:var(--warn)}
+.dupwarn{display:flex;flex-direction:column;gap:8px;background:var(--soon-bg);border:1.5px solid var(--soon);border-radius:14px;padding:12px 14px}
+.dupwarn>b{color:var(--soon);font-size:1.05rem}
+.dupwarn>small{color:var(--fg)}
+.duprow{display:flex;flex-wrap:wrap;gap:6px;align-items:center}

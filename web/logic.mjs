@@ -80,6 +80,31 @@ export function rujaQueue(cows, today = todayISO()) {
   }
   return out;
 }
+/**
+ * Usuwa powtórzenia z listy zadań: ta sama sztuka + to samo zadanie tylko raz,
+ * a gdy sztuka ma „Ruja – do zacielenia”, nie pokazujemy osobno „Zacielić” / „Jałówka gotowa do krycia”.
+ */
+export function dedupeAlerts(list) {
+  const seen = new Set(), byCow = new Map();
+  for (const a of list) {
+    const id = a.cow.id || a.cow.kolczyk;
+    if (!byCow.has(id)) byCow.set(id, new Set());
+    byCow.get(id).add(a.kind);
+  }
+  return list.filter((a) => {
+    const id = a.cow.id || a.cow.kolczyk, kinds = byCow.get(id);
+    if ((a.kind === "insem" || a.kind === "krycie") && kinds.has("ruja")) return false;
+    const key = id + "|" + a.kind;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+/** Klucz kolczyka do porównań: same cyfry (gdy są), inaczej tekst bez spacji. */
+export function tagKey(k) {
+  const t = String(k || "").toUpperCase().replace(/\s+/g, ""), d = t.replace(/\D/g, "");
+  return d.length >= 3 ? d : t;
+}
 export const rujaQueueId = (c, date) => `r-${c.id}-${date}`;
 export function insemDate(c, cfg) {
   if (!c.wycielenie) return null;

@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "4.1";
+export const APP_VERSION = "4.2";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -172,7 +172,16 @@ function start(code) {
     if (tab === "glowna") render();
   }, () => {}));
   unsub.push(onSnapshot(queueCol(code), (snap) => {
-    queue = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const rawQ = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (a.dodano || "").localeCompare(b.dodano || "") || (a.zmieniono || 0) - (b.zmieniono || 0));
+    // ta sama sztuka tylko raz na liście; nadmiarowe wpisy usuwamy z bazy
+    const seenQ = new Set();
+    queue = rawQ.filter((q) => {
+      const k = L.tagKey(q.kolczyk);
+      if (!seenQ.has(k)) { seenQ.add(k); return true; }
+      if (!snap.metadata?.fromCache) deleteDoc(doc(queueCol(code), q.id)).catch(() => {});
+      return false;
+    });
     queueLoaded = !snap.metadata?.fromCache || queueLoaded;
     autoQueue();
     render();
@@ -246,7 +255,26 @@ async function testNotif() {
   status("Wysłano – sprawdź pasek powiadomień.");
 }
 const allAlerts = (cs, ks, ahead, dueAhead) =>
-  [...L.alerts(cs, cfg, ahead, dueAhead), ...L.calfAlerts(ks, cfg, ahead, undefined, dueAhead)].sort((a, b) => (a.sort ?? a.n) - (b.sort ?? b.n));
+  L.dedupeAlerts([...L.alerts(cs, cfg, ahead, dueAhead), ...L.calfAlerts(ks, cfg, ahead, undefined, dueAhead)].sort((a, b) => (a.sort ?? a.n) - (b.sort ?? b.n)));
+/** Sztuki z tym samym kolczykiem (np. wpisane na dwóch telefonach bez internetu). */
+function duplicateTags() {
+  const m = new Map();
+  for (const a of [...cows, ...calves]) { const k = L.tagKey(a.kolczyk); if (!k) continue; if (!m.has(k)) m.set(k, []); m.get(k).push(a); }
+  return [...m.values()].filter((g) => g.length > 1);
+}
+function dupWarning(v) {
+  const groups = duplicateTags();
+  if (!groups.length) return;
+  const box = el("section", "dupwarn");
+  box.append(el("b", null, `Powtórzone kolczyki (${groups.length})`), el("small", null, "Ta sama sztuka jest wpisana więcej niż raz. Popraw numer albo usuń zbędny wpis."));
+  for (const g of groups) {
+    const row = el("div", "duprow");
+    row.append(tagEl(g[0]));
+    for (const a of g) row.append(btn(`${a.kolczyk} · ${animalKind(a)}${placeOf(a) ? " · " + placeOf(a) : ""} – Edytuj`, "ghost sm", () => cows.includes(a) ? openCow(a) : openCalf(a)));
+    box.append(row);
+  }
+  v.append(box);
+}
 
 // ---------------- zapis ----------------
 const rowData = (c) => { const { id, ...r } = c; return r; };
@@ -406,7 +434,7 @@ function render(dir = 0) {
   const v = $("view");
   v.replaceChildren();
   if (tab === "glowna") viewMain(v);
-  else if (tab === "powiadomienia") { v.append(statsRow(cows)); alertsSection(v, cows, calves, "Powiadomienia"); }
+  else if (tab === "powiadomienia") { dupWarning(v); v.append(statsRow(cows)); alertsSection(v, cows, calves, "Powiadomienia"); }
   else if (tab === "zacielenie") viewQueue(v);
   else if (tab === "cielaki" || tab === "jalowki") viewCalves(v, tab === "cielaki" ? "cielak" : "jalowka");
   else if (tab === "ustawienia") viewSettings(v);
@@ -460,6 +488,7 @@ function viewMain(v) {
   go.append(el("span", "gtn", String(na.length)), el("span", "gtt", na.length ? `${odm(na.length, "zadanie", "zadania", "zadań")} do zrobienia${urgent ? ` · ${urgent} na dziś lub zaległe` : ""}` : "Brak zadań na najbliższe dni"), el("span", "gta", "Powiadomienia →"));
   go.onclick = () => setTab("powiadomienia", -1);
   v.append(go);
+  dupWarning(v);
   // pełna lista całego stada z wyszukiwarką
   const s = el("input"); s.type = "search"; s.id = "szukaj"; s.placeholder = "Szukaj kolczyka, byka, matki…"; s.value = query;
   s.oninput = () => { query = s.value; renderSearch(); };
