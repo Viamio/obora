@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "4.3";
+export const APP_VERSION = "4.4";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -600,7 +600,34 @@ function alertsSection(v, cs, ks, title = "Do zrobienia") {
   const today = L.todayISO();
   const list = allAlerts(cs, ks, cfg.ahead, 14);
   if (!list.length) box.append(el("div", "empty", cs.length + ks.length ? `Nic do zrobienia w najbliższych ${L.dni(cfg.ahead)}.` : "Tu pojawią się zadania: zacielenie, ruja, badanie cielności, zasuszenie, porodówka, wycielenie i krycie jałówek."));
-  for (const a of list) {
+  const groups = ALERT_GROUPS.map((g) => ({ ...g, items: list.filter((a) => g.kinds.includes(a.kind)) })).filter((g) => g.items.length);
+  for (const g of groups) {
+    const det = el("details", "agroup");
+    const key = "obora_grp_" + g.id;
+    det.open = LS.get(key) === "1";
+    const urgent = g.items.filter((a) => a.n <= 0 || a.kind === "karencja").length;
+    const sm = el("summary");
+    sm.append(el("span", "gname", g.name), el("span", "gcount" + (urgent ? " hot" : ""), String(g.items.length)));
+    if (urgent) sm.append(el("small", "gurg", `${urgent} na dziś / zaległe`));
+    det.append(sm);
+    det.addEventListener("toggle", () => LS.set(key, det.open ? "1" : null));
+    const inner = el("div", "alerts");
+    for (const a of g.items) inner.append(alertRow(a, today));
+    det.append(inner);
+    box.append(det);
+  }
+  sec.append(box);
+  v.append(sec);
+}
+const ALERT_GROUPS = [
+  { id: "kar", name: "Karencja", kinds: ["karencja", "karencjaOk"] },
+  { id: "zac", name: "Do zacielenia", kinds: ["ruja", "insem", "krycie"] },
+  { id: "spr", name: "Do sprawdzenia (cielność, USG)", kinds: ["check", "usg"] },
+  { id: "dry", name: "Do zasuszenia", kinds: ["dry"] },
+  { id: "por", name: "Porodówka i wycielenia", kinds: ["move", "due"] },
+];
+function alertRow(a, today) {
+  {
     const c = a.cow;
     const cls = a.kind === "karencja" ? "soon kar" : a.kind === "karencjaOk" ? "good" : a.kind === "due" || (a.n <= 0 && a.kind === "check") ? "soon" : a.n <= 0 ? "warn" : "";
     const row = el("div", "alert " + cls);
@@ -613,7 +640,8 @@ function alertsSection(v, cs, ks, title = "Do zrobienia") {
     row.append(head, t, ab);
     const upd = a.calf ? (ch, msg) => { writeCalf(c.id, { ...rowData(c), ...ch }); status(msg); } : (ch, msg) => patch(c, ch, msg);
     const zacielona = () => insemCow(c, today);
-    if (a.kind === "check") ab.append(btn("Cielna", "okbtn", () => upd({ cielna: "tak" }, `${c.kolczyk}: cielna`)), btn("Niecielna", "nobtn", () => upd({ cielna: "nie" }, `${c.kolczyk}: niecielna`)));
+    if (a.kind === "check" || a.kind === "usg") ab.append(btn("Cielna", "okbtn", () => upd({ cielna: "tak" }, `${c.kolczyk}: cielna`)), btn("Niecielna", "nobtn", () => upd({ cielna: "nie" }, `${c.kolczyk}: niecielna`)));
+    if (a.kind === "check") ab.append(btn("Do USG", "ghost", () => upd({ usg: today }, `${c.kolczyk}: do zbadania USG`)));
     if (a.kind === "dry") ab.append(btn("Zasuszona", "okbtn", () => openDry(c)));
     if (a.kind === "move") ab.append(btn("Przegnana", "okbtn", () => upd({ przegnana: true }, `${c.kolczyk}: na porodówce`)));
     const other = () => btn("Inna data…", "ghost", () => openIns(c, !!a.calf));
@@ -622,10 +650,8 @@ function alertsSection(v, cs, ks, title = "Do zrobienia") {
     if (a.kind === "due") ab.append(btn("Wycieliła się", "okbtn", () => a.calf ? toHerd(c, { wycielenie: today }) : calved(c, today)));
     if (a.kind === "karencjaOk") ab.append(btn("OK, doję", "okbtn", () => patch(c, { karencjaOk: true }, `${c.kolczyk}: karencja zakończona`)));
     if (a.kind === "krycie") ab.append(btn("Zacielona dziś", "okbtn", () => heiferInsem(c, today)), other(), btn("Do stada krów", "nobtn", () => toHerd(c, {})));
-    box.append(row);
+    return row;
   }
-  sec.append(box);
-  v.append(sec);
 }
 
 function sortCows(cs) {
@@ -665,7 +691,7 @@ function cowCard(c) {
     left.append(el("span", "chip " + (kn > 0 ? "no" : "yes"), kn > 0 ? `Karencja: jeszcze ${L.dni(kn)}` : "Można doić"));
   }
   if (c.zacielenie && (L.pregnant(c) || c.cielna === "nie")) {
-    const chip = el("span", "chip", c.cielna === "tak" ? "Cielna ✓" : c.cielna === "nie" ? "Niecielna" : "Do sprawdzenia");
+    const chip = el("span", "chip", c.cielna === "tak" ? "Cielna ✓" : c.cielna === "nie" ? "Niecielna" : L.usgActive(c) ? "Do USG" : "Do sprawdzenia");
     if (c.cielna === "tak") chip.classList.add("yes"); if (c.cielna === "nie") chip.classList.add("no");
     left.append(chip);
   }
@@ -710,7 +736,8 @@ function cowCard(c) {
     if (c.zacielenie && c.cielna) btns.append(btn("Cofnij badanie", "ghost", () => patch(c, { cielna: "" }, `${c.kolczyk}: wynik cofnięty`)));
     if (c.zacielenie && !c.cielna) btns.append(
       btn("Cielna ✓", "okbtn", () => patch(c, { cielna: "tak" }, `${c.kolczyk}: cielna`)),
-      btn("Niecielna", "ghost", () => patch(c, { cielna: "nie" }, `${c.kolczyk}: niecielna`)));
+      btn("Niecielna", "ghost", () => patch(c, { cielna: "nie" }, `${c.kolczyk}: niecielna`)),
+      ...(L.usgActive(c) ? [] : [btn("Do USG", "ghost", () => patch(c, { usg: L.todayISO() }, `${c.kolczyk}: do zbadania USG`))]));
     btns.append(btn("Edytuj", "ghost", () => openCow(c)), btn("Usuń", "ghost", () => { confirmId = c.id; render(); }));
   }
   foot.append(btns);
@@ -818,7 +845,7 @@ const DAY_MS = 24 * 3600 * 1000;
 let grp = null, undoing = false;
 /** Wszystkie zapisy z jednego stuknięcia trafiają do jednej grupy (cofane razem). */
 function group() { if (!grp) { grp = newId("g"); queueMicrotask(() => { grp = null; }); } return grp; }
-const LABELS = { kolczyk: "kolczyk", nazwa: "nazwa", sprzedana: "sprzedaż", doSprzedania: "do sprzedania", zacielenie2: "2. zacielenie", byk2: "2. byk", miejsce: "miejsce", ojciec: "ojciec", wycielenie: "wycielenie", ruja: "ruja", zacielenie: "zacielenie",
+const LABELS = { usg: "do USG", kolczyk: "kolczyk", nazwa: "nazwa", sprzedana: "sprzedaż", doSprzedania: "do sprzedania", zacielenie2: "2. zacielenie", byk2: "2. byk", miejsce: "miejsce", ojciec: "ojciec", wycielenie: "wycielenie", ruja: "ruja", zacielenie: "zacielenie",
   byk: "byk", cielna: "cielność", zasuszona: "zasuszenie", zasuszonaData: "data zasuszenia", antybiotyk: "antybiotyk", karencja: "karencja",
   karencjaOk: "karencja", karencjaKoniec: "karencja", przegnana: "porodówka", foto: "zdjęcie", ukryj: "ukryte zadanie", wytrucie: "wytrucie",
   urodzona: "data urodzenia", plec: "płeć", typ: "typ", matka: "matka" };
@@ -1707,6 +1734,26 @@ function confirmAbort(btnId, hintId) {
   $(hintId).textContent = "Stuknij jeszcze raz, żeby potwierdzić.";
   return false;
 }
+// „Zacielona dziś” w formularzu: wpisuje dzisiejszą datę zacielenia, zostaje wybrać byka i Zapisz
+$("kInsToday").onclick = () => {
+  const today = L.todayISO(), c = cows.find((x) => x.id === editId) || editSeed;
+  if (c && isReInsem({ ...c, zacielenie: $("zacielenie").value || c.zacielenie }, today) && $("zacielenie").value) {
+    $("z2Box").open = true; $("zacielenie2").value = today; $("byk2").value = ""; $("cielnaSel").value = "";
+    updatePreview(); $("byk2").focus();
+    status(`Drugie zacielenie ${L.fmt(today)} – wybierz byka i naciśnij Zapisz.`);
+  } else {
+    $("zacielenie").value = today; $("byk").value = ""; $("zacielenie2").value = ""; $("byk2").value = ""; $("cielnaSel").value = "";
+    if (!$("ruja").value || $("ruja").value < today) $("ruja").value = today;
+    updatePreview(); $("byk").scrollIntoView({ block: "center" }); $("byk").focus();
+    status(`Zacielenie ${L.fmt(today)} wpisane – wybierz byka i naciśnij Zapisz.`);
+  }
+};
+$("cInsToday").onclick = () => {
+  const today = L.todayISO();
+  $("cZacielenie").value = today; $("cByk").value = ""; $("cCielna").value = "";
+  updateCalfPreview(); $("cByk").scrollIntoView({ block: "center" }); $("cByk").focus();
+  status(`Zacielenie ${L.fmt(today)} wpisane – wybierz byka i naciśnij Zapisz.`);
+};
 $("abortBtn").onclick = () => {
   if (!confirmAbort("abortBtn", "abortHint")) return;
   const c = cows.find((x) => x.id === editId);

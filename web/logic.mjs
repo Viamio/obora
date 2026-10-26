@@ -56,6 +56,8 @@ export function nextRuja(c, today = todayISO()) {
   if (!base || (c.cielna === "tak" && pregnant(c))) return null;
   let r = addDays(base, CYCLE);
   while (r < today) r = addDays(r, CYCLE);
+  // zacielona, niezbadana: ruję obserwujemy tylko przez ~3 cykle po zacieleniu
+  if (pregnant(c) && daysBetween(c.zacielenie2 || c.zacielenie, r) > 70) return null;
   return r;
 }
 /**
@@ -116,6 +118,8 @@ export function similarTag(a, b) {
   if (s.length < 4) return false;
   return l.endsWith(s) || (l.length - s.length === 1 && l.startsWith(s));
 }
+/** Wynik badania niepewny – krowa czeka na USG (do czasu wpisania cielna / niecielna). */
+export const usgActive = (c) => !!(c.usg && !c.cielna && pregnant(c) && c.usg >= (c.zacielenie2 || c.zacielenie));
 export const rujaQueueId = (c, date) => `r-${c.id}-${date}`;
 export function insemDate(c, cfg) {
   if (!c.wycielenie) return null;
@@ -144,7 +148,8 @@ export function alerts(cows, cfg, ahead, dueAhead, today = todayISO()) {
   for (const c of cows) {
     push(c, "insem", insemDate(c, cfg), "Zacielić", `Gotowa od ${fmt(insemDate(c, cfg))} (${cfg.vwp} dni po wycieleniu)`);
     push(c, "ruja", nextRuja(c, today), pregnant(c) ? "Jeśli się nie zacieliła – może biegać" : "Ruja – może biegać, do zacielenia", rujaSub(c, today));
-    push(c, "check", checkDate(c, cfg), "Sprawdzić czy cielna", `${fmt(checkDate(c, cfg))} (${cfg.check} dni po zacieleniu)`);
+    if (usgActive(c)) { if (!hidden(c, "usg", c.usg)) out.push({ cow: c, kind: "usg", date: c.usg, n: Math.min(0, daysBetween(today, c.usg)), title: "Do zbadania USG", sub: `wynik niepewny od ${fmt(c.usg)} – zacielona ${fmt(c.zacielenie2 || c.zacielenie)}` }); }
+    else push(c, "check", checkDate(c, cfg), "Sprawdzić czy cielna", `${fmt(checkDate(c, cfg))} (${cfg.check} dni po zacieleniu)`);
     if (!c.zasuszona) push(c, "dry", dryDate(c, cfg), "Zasuszyć", `${fmt(dryDate(c, cfg))} (${cfg.dry} dni przed porodem)`);
     if (!c.przegnana) push(c, "move", moveDate(c, cfg), "Przegnać na porodówkę", `${fmt(moveDate(c, cfg))} (${cfg.move} dni przed porodem)`);
     const d = due(c);
@@ -213,7 +218,8 @@ export function calfAlerts(calves, cfg, ahead, today = todayISO(), dueAhead) {
     // zacielona jałówka: badanie cielności, porodówka, wycielenie (bez zasuszania)
     if (c.zacielenie && c.cielna !== "nie") {
       if (c.cielna !== "tak") push(c, "ruja", nextRuja(c, today), "Jeśli się nie zacieliła – może biegać", rujaSub(c, today));
-      push(c, "check", checkDate(c, cfg), "Sprawdzić czy cielna", `${fmt(checkDate(c, cfg))} (${cfg.check} dni po zacieleniu)`);
+      if (usgActive(c)) { if (!hidden(c, "usg", c.usg)) out.push({ cow: c, calf: true, kind: "usg", date: c.usg, n: Math.min(0, daysBetween(today, c.usg)), title: "Do zbadania USG", sub: `wynik niepewny od ${fmt(c.usg)} – zacielona ${fmt(c.zacielenie2 || c.zacielenie)}` }); }
+      else push(c, "check", checkDate(c, cfg), "Sprawdzić czy cielna", `${fmt(checkDate(c, cfg))} (${cfg.check} dni po zacieleniu)`);
       if (!c.przegnana) push(c, "move", moveDate(c, cfg), "Przegnać na porodówkę", `${fmt(moveDate(c, cfg))} (${cfg.move} dni przed porodem)`);
       const d = due(c);
       if (d) push(c, "due", d, daysBetween(today, d) < 0 ? "Po terminie wycielenia" : "Wycielenie jałówki", `Termin ${fmt(d)}`, dueAhead ?? 14);
