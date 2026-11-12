@@ -158,7 +158,7 @@
       <button type="submit" class="primary" id="saveBtn">Zapisz krowę</button>
     </div>
     <div class="abort" id="abortBox" hidden>
-      <div class="row"><button type="button" class="ghost danger" id="abortBtn">Wytrucie</button><button type="button" class="okbtn" id="kInsToday">Zacielona dziś</button></div>
+      <div class="row"><button type="button" class="ghost danger" id="abortBtn">Wytrucie</button><button type="button" class="okbtn" id="kInsToday">Zacielona dziś</button><button type="button" class="okbtn" id="kCalved">Wycielona…</button></div>
       <small id="abortHint">Krowa będzie niecielna, a terminy liczą się od nowa – jak po wycieleniu.</small>
     </div>
     <div class="sellbox" id="kSellBox" hidden>
@@ -170,6 +170,20 @@
 </dialog>
 
 <!-- Zasuszenie: jakim antybiotykiem -->
+<dialog class="sheet" id="calvDlg" aria-labelledby="calvTitle">
+  <form id="calvForm" novalidate>
+    <div class="sheethead"><h2 id="calvTitle">Wycielona</h2><button type="button" class="ghost x" id="calvCancel" aria-label="Zamknij">✕</button></div>
+    <p class="hint" id="calvWho"></p>
+    <label for="calvDate">Kiedy się wycieliła
+      <input id="calvDate" type="date">
+    </label>
+    <p class="hint" id="calvInfo"></p>
+    <label class="chk"><input type="checkbox" id="calvAddCalf" checked> Dodaj od razu cielaka (kolczyk, byczek / jałoszka)</label>
+    <p class="err" id="calvErr" hidden></p>
+    <div class="actions"><button type="submit" class="primary" id="calvSave">Zapisz wycielenie</button></div>
+  </form>
+</dialog>
+
 <dialog class="sheet" id="insDlg" aria-labelledby="insTitle">
   <form id="insForm" novalidate>
     <div class="sheethead"><h2 id="insTitle">Zacielona</h2><button type="button" class="ghost x" id="insCancel" aria-label="Zamknij">✕</button></div>
@@ -311,7 +325,7 @@
     <p class="err" id="cErr" hidden></p>
     <div class="actions"><button type="submit" class="primary" id="cSave">Zapisz</button></div>
     <div class="abort" id="cAbortBox" hidden>
-      <div class="row"><button type="button" class="ghost danger" id="cAbortBtn">Wytrucie</button><button type="button" class="okbtn" id="cInsToday">Zacielona dziś</button></div>
+      <div class="row"><button type="button" class="ghost danger" id="cAbortBtn">Wytrucie</button><button type="button" class="okbtn" id="cInsToday">Zacielona dziś</button><button type="button" class="okbtn" id="cCalved">Wycielona…</button></div>
       <small id="cAbortHint">Jałówka przejdzie do krów jak po wycieleniu – terminy liczą się od dziś.</small>
     </div>
     <div class="sellbox" id="cSellBox" hidden>

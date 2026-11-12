@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "4.4";
+export const APP_VERSION = "4.5";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -738,7 +738,7 @@ function cowCard(c) {
       btn("Cielna ✓", "okbtn", () => patch(c, { cielna: "tak" }, `${c.kolczyk}: cielna`)),
       btn("Niecielna", "ghost", () => patch(c, { cielna: "nie" }, `${c.kolczyk}: niecielna`)),
       ...(L.usgActive(c) ? [] : [btn("Do USG", "ghost", () => patch(c, { usg: L.todayISO() }, `${c.kolczyk}: do zbadania USG`))]));
-    btns.append(btn("Edytuj", "ghost", () => openCow(c)), btn("Usuń", "ghost", () => { confirmId = c.id; render(); }));
+    btns.append(btn("Wycielona", "okbtn", () => openCalv(c, false)), btn("Edytuj", "ghost", () => openCow(c)), btn("Usuń", "ghost", () => { confirmId = c.id; render(); }));
   }
   foot.append(btns);
   card.append(foot);
@@ -780,7 +780,7 @@ function calfCard(c) {
     btns.append(el("span", "note", "Usunąć?"), btn("Nie", "ghost", () => { confirmId = null; render(); }), btn("Tak, usuń", "del", () => { confirmId = null; deleteAnimal("mlodziez", c); status("Usunięto. Możesz to cofnąć w Historii zmian na Głównej."); }));
   } else {
     if (typOf(c) === "cielak" && c.plec !== "b") btns.append(btn("Do jałówek", "ghost", () => { writeCalf(c.id, { ...rowData(c), typ: "jalowka", plec: "j" }); status(`${c.kolczyk} przeniesiona do jałówek.`); }));
-    if (typOf(c) === "jalowka") btns.append(btn("Do stada krów", "ghost", () => toHerd(c, {})));
+    if (typOf(c) === "jalowka") btns.append(btn("Wycielona", "okbtn", () => openCalv(c, true)), btn("Do stada krów", "ghost", () => toHerd(c, {})));
     btns.append(btn("Edytuj", "ghost", () => openCalf(c)), btn("Usuń", "ghost", () => { confirmId = c.id; render(); }));
   }
   foot.append(btns);
@@ -1058,7 +1058,7 @@ function fillLists() {
 }
 
 // ---------------- formularz krowy ----------------
-function closeDialogs() { for (const id of ["cowDlg", "calfDlg", "pickDlg", "dryDlg", "sellDlg", "insDlg"]) { const d = $(id); if (d.open) d.close(); } }
+function closeDialogs() { for (const id of ["cowDlg", "calfDlg", "pickDlg", "dryDlg", "sellDlg", "insDlg", "calvDlg"]) { const d = $(id); if (d.open) d.close(); } }
 function currentPlace() { return tab.startsWith("m:") && tab !== "m:" + NO_PLACE ? tab.slice(2) : ""; }
 function updatePreview() {
   const z = $("zacielenie").value, r = $("ruja").value;
@@ -1539,6 +1539,48 @@ function updateMotherInfo() {
   if (p?.skip) $("cMotherInfo").textContent += " " + p.skip;
   else if (p) $("cMotherChkT").textContent = p.heifer ? `Wpisz jej wycielenie ${L.fmt(date)} i przenieś do krów` : `Wpisz matce wycielenie ${L.fmt(date)}` + (p.onlyDate ? "" : " (terminy od nowa)");
 }
+// ---------------- wycielenie z wyborem daty ----------------
+let calvTarget = null;
+function openCalv(c, heifer) {
+  closeDialogs();
+  calvTarget = { c, heifer };
+  $("calvWho").textContent = `${c.kolczyk} – ${animalDesc(c)}`;
+  $("calvDate").value = L.todayISO(); $("calvDate").max = L.todayISO();
+  $("calvErr").hidden = true; $("calvAddCalf").checked = true;
+  calvInfo();
+  $("calvDlg").showModal();
+}
+function calvInfo() {
+  const { c, heifer } = calvTarget, d = $("calvDate").value;
+  const parts = [];
+  const due = L.due(c);
+  if (due && d) { const n = L.daysBetween(due, d); parts.push(n === 0 ? `W terminie (${L.fmt(due)}).` : `Termin był ${L.fmt(due)} – ${Math.abs(n)} ${odm(Math.abs(n), "dzień", "dni", "dni")} ${n < 0 ? "wcześniej" : "później"}.`); }
+  if (c.zacielenie2 && d) { const g = L.guessSire(c, d); parts.push(`Cielę po: ${g.byk || "?"} (bliżej terminu z ${g.which}. zacielenia).`); }
+  if (heifer) parts.push("Jałówka przejdzie do stada krów.");
+  else parts.push("Terminy liczą się od nowa" + (c.zasuszona && c.antybiotyk ? `, karencja po „${c.antybiotyk}” zacznie się liczyć.` : "."));
+  $("calvInfo").textContent = parts.join(" ");
+}
+$("calvDate").addEventListener("input", calvInfo);
+$("calvCancel").onclick = () => $("calvDlg").close();
+$("kCalved").onclick = () => { const c = cows.find((x) => x.id === editId); if (c) openCalv(c, false); };
+$("cCalved").onclick = () => { const c = calves.find((x) => x.id === calfEditId); if (c) openCalv(c, true); };
+$("calvForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const err = (t) => { $("calvErr").textContent = t; $("calvErr").hidden = false; };
+  const d = $("calvDate").value, { c, heifer } = calvTarget;
+  if (!d) return err("Wybierz datę wycielenia.");
+  if (d > L.todayISO()) return err("Data nie może być z przyszłości.");
+  if (c.wycielenie && d <= c.wycielenie) return err(`Ostatnie wycielenie jest z ${L.fmt(c.wycielenie)} – wybierz późniejszą datę.`);
+  if (heifer) toHerd(c, { wycielenie: d }); else calved(c, d);
+  $("calvDlg").close();
+  if ($("calvAddCalf").checked) setTimeout(() => {
+    openCalf(null, "cielak");
+    $("cMatka").value = c.kolczyk; $("cUrodzona").value = d;
+    $("cUrodzona").dispatchEvent(new Event("input")); $("cMatka").dispatchEvent(new Event("input"));
+    setTimeout(() => $("cKolczyk").focus(), 50);
+  }, 250);
+});
+
 // ---------------- zacielenie z wyborem daty ----------------
 let insTarget = null;
 function openIns(a, calf) {
