@@ -324,3 +324,15 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .agroup>summary{display:grid;grid-template-columns:auto auto 1fr auto;align-items:center;column-gap:10px;row-gap:2px}
 .agroup>summary::after{grid-column:4;grid-row:1;margin-left:0}
 .agroup .gurg{grid-column:1/-1;grid-row:2;margin-top:0}
+/* Bolusy */
+.bolform{display:flex;flex-direction:column;gap:12px}
+.bolsel{display:flex;flex-wrap:wrap;gap:6px;margin-top:-4px}
+.bolchip{display:inline-flex;align-items:center;gap:2px;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:2px 2px 2px 4px}
+.bolchip .xclose{min-height:30px;padding:0 8px}
+.bolgroup{display:flex;flex-direction:column;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+.bolhead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:6px}
+.bolhead b{font-family:var(--display);font-size:1.2rem}
+.bolhead span{color:var(--muted);font-size:.85rem}
+.bolrow{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.bolrow .sinfo{display:flex;flex-direction:column;align-items:flex-start;gap:3px}
+.bolrow small{color:var(--muted);font-size:.8rem}
