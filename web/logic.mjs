@@ -120,6 +120,28 @@ export function similarTag(a, b) {
 }
 /** Wynik badania niepewny – krowa czeka na USG (do czasu wpisania cielna / niecielna). */
 export const usgActive = (c) => !!(c.usg && !c.cielna && pregnant(c) && c.usg >= (c.zacielenie2 || c.zacielenie));
+/**
+ * Przypomnienia o ponownym bolusie: dla każdej sztuki i rodzaju bolusa liczy się tylko ostatni wpis,
+ * termin = data + „powtórzyć po” dni.
+ */
+export function bolusAlerts(bols, animals, cfg, ahead, today = todayISO(), isCalf = (a) => !!a._calf) {
+  const out = [], late = cfg.zalegle ?? 30;
+  const norm = (k) => String(k || "").replace(/\D/g, "") || String(k || "");
+  for (const a of animals) {
+    const mine = bols.filter((b) => (b.zwierze && b.zwierze === a.id) || (!b.zwierze && norm(b.kolczyk) === norm(a.kolczyk)));
+    const last = new Map();
+    for (const b of mine) { const k = (b.nazwa || "").toLowerCase(); const p = last.get(k); if (!p || (b.data || "") > (p.data || "")) last.set(k, b); }
+    for (const b of last.values()) {
+      const n0 = Number(b.powtorz);
+      if (!(n0 > 0) || !b.data) continue;
+      const date = addDays(b.data, n0);
+      if (hidden(a, "bolus", date)) continue;
+      const n = daysBetween(today, date);
+      if (n <= ahead && n >= -late) out.push({ cow: a, calf: isCalf(a), kind: "bolus", date, n, bolus: b, title: `Powtórzyć bolus: ${b.nazwa || "bolus"}`, sub: `ostatnio ${fmt(b.data)} · co ${n0} dni` });
+    }
+  }
+  return out;
+}
 export const rujaQueueId = (c, date) => `r-${c.id}-${date}`;
 export function insemDate(c, cfg) {
   if (!c.wycielenie) return null;

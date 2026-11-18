@@ -6,7 +6,7 @@ import {
 import { getMessaging, getToken, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 import * as L from "./logic.mjs";
 
-export const APP_VERSION = "4.6";
+export const APP_VERSION = "4.7";
 const $ = (id) => document.getElementById(id);
 const LS = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
@@ -261,7 +261,9 @@ async function testNotif() {
   status("Wysłano – sprawdź pasek powiadomień.");
 }
 const allAlerts = (cs, ks, ahead, dueAhead) =>
-  L.dedupeAlerts([...L.alerts(cs, cfg, ahead, dueAhead), ...L.calfAlerts(ks, cfg, ahead, undefined, dueAhead)].sort((a, b) => (a.sort ?? a.n) - (b.sort ?? b.n)));
+  L.dedupeAlerts([...L.alerts(cs, cfg, ahead, dueAhead), ...L.calfAlerts(ks, cfg, ahead, undefined, dueAhead),
+    ...L.bolusAlerts(bolusy, [...cs, ...ks], cfg, ahead, undefined, (a) => ks.includes(a))]
+    .sort((a, b) => (a.sort ?? a.n) - (b.sort ?? b.n)));
 /** Sztuki z tym samym kolczykiem (np. wpisane na dwóch telefonach bez internetu). */
 function duplicateTags() {
   const m = new Map();
@@ -632,6 +634,7 @@ const ALERT_GROUPS = [
   { id: "spr", name: "Do sprawdzenia (cielność, USG)", kinds: ["check", "usg"] },
   { id: "dry", name: "Do zasuszenia", kinds: ["dry"] },
   { id: "por", name: "Porodówka i wycielenia", kinds: ["move", "due"] },
+  { id: "bol", name: "Bolusy", kinds: ["bolus"] },
 ];
 function alertRow(a, today) {
   {
@@ -656,6 +659,11 @@ function alertRow(a, today) {
     if (a.kind === "insem") ab.append(btn("Zacielona dziś", "okbtn", zacielona), other());
     if (a.kind === "due") ab.append(btn("Wycieliła się", "okbtn", () => a.calf ? toHerd(c, { wycielenie: today }) : calved(c, today)));
     if (a.kind === "karencjaOk") ab.append(btn("OK, doję", "okbtn", () => patch(c, { karencjaOk: true }, `${c.kolczyk}: karencja zakończona`)));
+    if (a.kind === "bolus") ab.append(btn("Podany dziś", "okbtn", () => {
+      const b = a.bolus;
+      setDoc(doc(bolusCol(farm), newId("b")), { kolczyk: c.kolczyk, zwierze: c.id, data: today, nazwa: b.nazwa || "", powtorz: Number(b.powtorz) || 0, uwagi: "", dodano: Date.now() }).catch(() => {});
+      status(`${c.kolczyk}: bolus „${b.nazwa}” podany ${L.fmt(today)}${b.powtorz ? ` – następny ${L.fmt(L.addDays(today, Number(b.powtorz)))}` : ""}.`);
+    }));
     if (a.kind === "krycie") ab.append(btn("Zacielona dziś", "okbtn", () => heiferInsem(c, today)), other(), btn("Do stada krów", "nobtn", () => toHerd(c, {})));
     return row;
   }
@@ -726,7 +734,7 @@ function cowCard(c) {
   ];
   const kids = childrenOf(c);
   const lastBol = bolusOf(c)[0];
-  if (lastBol) items.push(["Bolus", `${lastBol.nazwa || "bolus"} (${L.fmt(lastBol.data)})`]);
+  if (lastBol) items.push(["Bolus", `${lastBol.nazwa || "bolus"} (${L.fmt(lastBol.data)})${lastBol.powtorz ? ` · ponownie ${L.fmt(L.addDays(lastBol.data, +lastBol.powtorz))}` : ""}`]);
   if (kids.length) items.push(["Cielęta", kids.map((k) => `${k.kolczyk}${k.nazwa ? " " + k.nazwa : ""}${k.urodzona ? ` (${L.fmt(k.urodzona)})` : ""}`).join(", ")]);
   for (const [k, val] of items) {
     const w = el("div"), dd = el("dd", k === "Termin porodu" && due ? "big" : null);
@@ -1639,7 +1647,7 @@ $("insForm").addEventListener("submit", (e) => {
 
 // ---------------- bolusy ----------------
 const bolusOf = (a) => bolusy.filter((b) => (b.zwierze && b.zwierze === a.id) || sameTag(b.kolczyk, a.kolczyk)).sort((x, y) => (y.data || "").localeCompare(x.data || ""));
-const bolDraft = { sel: [], data: "", nazwa: "", uwagi: "", kol: "" };
+const bolDraft = { sel: [], data: "", nazwa: "", uwagi: "", kol: "", powtorz: "" };
 let bolDelId = null;
 function viewBolus(v) {
   const today = L.todayISO();
@@ -1671,11 +1679,20 @@ function viewBolus(v) {
   [...new Set(bolusy.map((b) => b.nazwa).filter(Boolean))].sort().forEach((n) => { const o = el("option"); o.value = n; dl.append(o); });
   nLab.append(nIn, dl);
   row.append(dLab, nLab);
+  const rLab = el("label", null, "Podać ponownie po ");
+  rLab.append(el("small", null, "(opcjonalnie – przypomnę)"));
+  const rRow = el("span", "numrow"); const rIn = el("input"); rIn.inputMode = "numeric"; rIn.autocomplete = "off"; rIn.placeholder = "np. 60"; rIn.value = bolDraft.powtorz || "";
+  rIn.oninput = () => { bolDraft.powtorz = rIn.value; rInfo(); }; rRow.append(rIn, el("span", null, "dni")); rLab.append(rRow);
+  const rOut = el("p", "hint");
+  const rInfo = () => { const n = parseInt(bolDraft.powtorz, 10); rOut.textContent = n > 0 && bolDraft.data ? `Następny bolus: ${L.fmt(L.addDays(bolDraft.data, n))}` : ""; };
+  // przy znanym bolusie podpowiedz ostatnio używaną liczbę dni
+  nIn.addEventListener("change", () => { if (rIn.value) return; const prev = bolusy.filter((b) => (b.nazwa || "").toLowerCase() === nIn.value.trim().toLowerCase() && b.powtorz).sort((x, y) => (y.dodano || 0) - (x.dodano || 0))[0]; if (prev) { rIn.value = bolDraft.powtorz = String(prev.powtorz); rInfo(); } });
+  dIn.addEventListener("input", rInfo); rInfo();
   const uLab = el("label", null, "Uwagi "); uLab.append(el("small", null, "(opcjonalnie)"));
   const uIn = el("input"); uIn.autocomplete = "off"; uIn.placeholder = "np. dawka, powód"; uIn.value = bolDraft.uwagi; uIn.oninput = () => { bolDraft.uwagi = uIn.value; }; uLab.append(uIn);
   const err = el("p", "err"); err.hidden = true;
   const sub = el("button", "primary", "Zapisz bolus"); sub.type = "submit";
-  f.append(kLab, chips, row, uLab, err, sub);
+  f.append(kLab, chips, row, rLab, rOut, uLab, err, sub);
   v.append(f);
   tagAssist(kIn, { dupError: false, onPick: pick });
   kIn.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); const a = tagOwner(kIn.value); if (a) pick(a); } });
@@ -1687,15 +1704,17 @@ function viewBolus(v) {
     if (!bolDraft.sel.length) return show("Wybierz krowę – wpisz kolczyk i stuknij ją na liście.");
     if (!bolDraft.data || bolDraft.data > today) return show("Wybierz datę (nie z przyszłości).");
     if (!bolDraft.nazwa.trim()) return show("Wpisz, jaki to bolus.");
+    const powt = bolDraft.powtorz ? parseInt(bolDraft.powtorz, 10) : 0;
+    if (bolDraft.powtorz && !(powt > 0 && powt <= 1000)) return show("Liczba dni: od 1 do 1000.");
     const b = writeBatch(db), now = Date.now();
     const names = [];
     for (const id of bolDraft.sel) {
       const a = findById(id); if (!a) continue;
-      b.set(doc(bolusCol(farm), newId("b")), { kolczyk: a.kolczyk, zwierze: a.id, data: bolDraft.data, nazwa: bolDraft.nazwa.trim(), uwagi: bolDraft.uwagi.trim(), dodano: now });
+      b.set(doc(bolusCol(farm), newId("b")), { kolczyk: a.kolczyk, zwierze: a.id, data: bolDraft.data, nazwa: bolDraft.nazwa.trim(), powtorz: powt, uwagi: bolDraft.uwagi.trim(), dodano: now });
       names.push(a.kolczyk);
     }
     b.commit().catch(() => status("Nie udało się zapisać. Sprawdź internet."));
-    status(`Zapisano bolus „${bolDraft.nazwa.trim()}” (${L.fmt(bolDraft.data)}): ${names.join(", ")}.`);
+    status(`Zapisano bolus „${bolDraft.nazwa.trim()}” (${L.fmt(bolDraft.data)}): ${names.join(", ")}.` + (powt ? ` Przypomnę ${L.fmt(L.addDays(bolDraft.data, powt))}.` : ""));
     bolDraft.sel = []; bolDraft.uwagi = "";
     render();
   };
@@ -1705,15 +1724,15 @@ function viewBolus(v) {
   if (!bolusy.length) s.append(el("div", "empty", "Jeszcze nic nie wpisano."));
   const groups = new Map();
   for (const b of [...bolusy].sort((x, y) => (y.data || "").localeCompare(x.data || "") || (y.dodano || 0) - (x.dodano || 0))) {
-    const k = `${b.data}|${b.nazwa}`;
+    const k = `${b.data}|${b.nazwa}|${b.powtorz || 0}`;
     if (!groups.has(k)) groups.set(k, []);
     groups.get(k).push(b);
   }
   for (const [k, list] of groups) {
-    const [data, nazwa] = k.split("|");
+    const [data, nazwa, pw] = k.split("|");
     const g = el("div", "bolgroup");
     const gh = el("div", "bolhead");
-    gh.append(el("b", null, nazwa || "bolus"), el("span", null, `${L.fmt(data)} · ${list.length} ${odm(list.length, "sztuka", "sztuki", "sztuk")}`));
+    gh.append(el("b", null, nazwa || "bolus"), el("span", null, `${L.fmt(data)} · ${list.length} ${odm(list.length, "sztuka", "sztuki", "sztuk")}${+pw ? ` · ponownie ${L.fmt(L.addDays(data, +pw))}` : ""}`));
     g.append(gh);
     for (const b of list) {
       const a = findAnimal(b.kolczyk);

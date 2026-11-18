@@ -1,7 +1,7 @@
 // Codzienne powiadomienia: uruchamiane co godzinę przez GitHub Actions.
 // Dla każdego gospodarstwa, gdy w Polsce minie ustawiona godzina, wysyła listę zadań na wszystkie telefony.
 import admin from "firebase-admin";
-import { alerts, calfAlerts, cfgOf, todayISO, kiedy, zadania, rujaQueue, rujaQueueId, dedupeAlerts, tagKey } from "../web/logic.mjs";
+import { alerts, calfAlerts, cfgOf, todayISO, kiedy, zadania, rujaQueue, rujaQueueId, dedupeAlerts, tagKey, bolusAlerts } from "../web/logic.mjs";
 
 const APP_URL = process.env.APP_URL || "";
 const FORCE = process.env.WYMUS === "1";
@@ -35,7 +35,9 @@ for (const ref of farms) {
   if (!FORCE) await ref.set({ ostatnio: today }, { merge: true });
 
   const calves = (await ref.collection("mlodziez").get()).docs.map((d) => ({ id: d.id, ...d.data() })).filter((c) => !c.sprzedana);
-  const list = dedupeAlerts([...alerts(cows, cfg, 1, 7, today), ...calfAlerts(calves, cfg, 1, today, 7)].sort((x, y) => (x.sort ?? x.n) - (y.sort ?? y.n)));
+  const bols = (await ref.collection("bolusy").get()).docs.map((d) => d.data());
+  const list = dedupeAlerts([...alerts(cows, cfg, 1, 7, today), ...calfAlerts(calves, cfg, 1, today, 7),
+    ...bolusAlerts(bols, [...cows, ...calves.map((c) => ({ ...c, _calf: true }))], cfg, 1, today)].sort((x, y) => (x.sort ?? x.n) - (y.sort ?? y.n)));
   if (!phones.length || (!list.length && !FORCE)) continue;
 
   const title = list.length ? `Obora: ${list.length} ${zadania(list.length)}` : "Obora: nic do zrobienia";
